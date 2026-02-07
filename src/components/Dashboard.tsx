@@ -104,8 +104,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 md:p-8">
+      <div className="w-full mx-auto px-0 md:max-w-7xl">
         {/* Header */}
         <div className="mb-12 text-center flex items-center justify-between">
           <div className="flex-1">
@@ -179,14 +179,14 @@ export default function Dashboard() {
         </div>
 
         {/* Site Plan */}
-        <div className="mb-12 flex justify-center px-4">
-          <div className="w-full md:w-1/2 bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
-            <h2 className="text-lg md:text-xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
-            <div className="relative rounded-lg overflow-hidden shadow-2xl group">
+        <div className="mb-12 -mx-8 px-4 flex justify-center">
+          <div className="w-full md:w-3/4 lg:w-2/3 bg-white/5 backdrop-blur-lg rounded-lg p-6 border border-white/10">
+            <h2 className="text-lg md:text-2xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
+            <div className="relative rounded-lg overflow-hidden shadow-2xl group max-h-96 md:max-h-full">
               <img
                 src="/site-plan.jpg"
                 alt="Site Planı"
-                className="w-full h-auto object-cover"
+                className="w-full h-full object-cover"
               />
               {/* Clickable Block Overlay */}
               <svg

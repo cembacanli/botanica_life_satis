@@ -179,9 +179,9 @@ export default function Dashboard() {
         </div>
 
         {/* Site Plan */}
-        <div className="mb-12 flex justify-center">
-          <div className="w-1/2 bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
-            <h2 className="text-xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
+        <div className="mb-12 flex justify-center px-4">
+          <div className="w-full md:w-1/2 bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
+            <h2 className="text-lg md:text-xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
             <div className="relative rounded-lg overflow-hidden shadow-2xl group">
               <img
                 src="/site-plan.jpg"

@@ -24,7 +24,6 @@ export function useAuth() {
 
   // Başlangıçta kullanıcıları ve oturumu yükle
   useEffect(() => {
-    const users = getStoredUsers()
     const currentUser = getStoredCurrentUser()
 
     if (currentUser) {

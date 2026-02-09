@@ -185,6 +185,7 @@ export default function SalesModal({
   })
 
   const numberOfSelectedApartments = selectedApartments?.size || 0
+  const salePriceValue = Number(formData.salePrice || 0)
 
   // When modal opens, initialize salePrice with apartment price (total for multiple) - ONLY on first open
   React.useEffect(() => {
@@ -627,19 +628,19 @@ export default function SalesModal({
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     style={{ pointerEvents: 'auto', cursor: 'text' }}
                   />
-                  {formData.salePrice > 0 && (
+                  {salePriceValue > 0 && (
                     <p className="text-sm text-blue-600 mt-1 mb-3">
                       {new Intl.NumberFormat('tr-TR', {
                         minimumFractionDigits: 0,
                         maximumFractionDigits: 0,
-                      }).format(formData.salePrice)} ({numberToText(formData.salePrice)})
+                      }).format(salePriceValue)} ({numberToText(salePriceValue)})
                       {numberOfSelectedApartments > 1 && (
                         <span className="block text-purple-600 mt-1">
                           Daire başına: {new Intl.NumberFormat('tr-TR', {
                             style: 'currency',
                             currency: 'TRY',
                             minimumFractionDigits: 0,
-                          }).format(parseInt(formData.salePrice) / numberOfSelectedApartments)}
+                          }).format(salePriceValue / numberOfSelectedApartments)}
                         </span>
                       )}
                     </p>

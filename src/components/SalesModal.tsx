@@ -4,6 +4,101 @@ import React, { useState } from 'react'
 import { Apartment } from '@/lib/data-generator'
 import { INSTALLMENT_OPTIONS, calculateInstallment, formatPrice } from '@/lib/installments'
 
+// Sayıyı yazıya çeviren fonksiyon
+function numberToText(num: number): string {
+  if (!num || num === 0) return 'sıfır'
+  
+  const ones = ['', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz']
+  const tens = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan']
+  
+  const groups = [
+    { value: 1000000000, name: 'milyar' },
+    { value: 1000000, name: 'milyon' },
+    { value: 1000, name: 'bin' }
+  ]
+  
+  let text = ''
+  let remaining = Math.floor(num)
+  
+  for (const group of groups) {
+    if (remaining >= group.value) {
+      const count = Math.floor(remaining / group.value)
+      
+      if (count >= 1000) {
+        // Örn: 5000 milyon = beş bin milyon
+        const thousands = Math.floor(count / 1000)
+        const hundreds = count % 1000
+        
+        if (thousands > 1) {
+          text += ones[thousands] + ' bin'
+        } else {
+          text += 'bin'
+        }
+        
+        if (hundreds > 0) {
+          if (hundreds >= 100) {
+            const h = Math.floor(hundreds / 100)
+            text += ' ' + (h > 1 ? ones[h] : '') + 'yüz'
+            const tens_ones = hundreds % 100
+            if (tens_ones > 0) {
+              const t = Math.floor(tens_ones / 10)
+              const o = tens_ones % 10
+              if (t > 0) text += ' ' + tens[t]
+              if (o > 0) text += ' ' + ones[o]
+            }
+          } else {
+            const t = Math.floor(hundreds / 10)
+            const o = hundreds % 10
+            if (t > 0) text += ' ' + tens[t]
+            if (o > 0) text += ' ' + ones[o]
+          }
+        }
+      } else if (count >= 100) {
+        const h = Math.floor(count / 100)
+        text += (h > 1 ? ones[h] : '') + 'yüz'
+        const tens_ones = count % 100
+        if (tens_ones > 0) {
+          const t = Math.floor(tens_ones / 10)
+          const o = tens_ones % 10
+          if (t > 0) text += ' ' + tens[t]
+          if (o > 0) text += ' ' + ones[o]
+        }
+      } else if (count >= 10) {
+        const t = Math.floor(count / 10)
+        const o = count % 10
+        text += tens[t]
+        if (o > 0) text += ' ' + ones[o]
+      } else {
+        if (group.name === 'bin' && count === 1) {
+          text += 'bin'
+        } else {
+          text += ones[count]
+        }
+      }
+      
+      text += ' ' + group.name
+      remaining = remaining % group.value
+    }
+  }
+  
+  if (remaining >= 100) {
+    const h = Math.floor(remaining / 100)
+    text += ' ' + (h > 1 ? ones[h] : '') + 'yüz'
+    remaining = remaining % 100
+  }
+  
+  if (remaining >= 10) {
+    const t = Math.floor(remaining / 10)
+    const o = remaining % 10
+    text += ' ' + tens[t]
+    if (o > 0) text += ' ' + ones[o]
+  } else if (remaining > 0) {
+    text += ' ' + ones[remaining]
+  }
+  
+  return text.trim()
+}
+
 interface SalesRecord {
   apartmentId: string
   saleType: 'reservation' | 'deposit' | 'sold'
@@ -17,7 +112,8 @@ interface SalesModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (saleData: SaleData | SaleData[]) => void
-  onCancel?: (recordId: number) => void
+  onCancel?: (apartmentId: string) => void
+  onCancelMultiple?: () => void // Çoklu iptal için
   existingRecords?: SalesRecord[]
   userRole?: string // 'admin' ise iptal butonu gösterilir
   selectedApartments?: Set<string> // Çoklu seçim için
@@ -68,6 +164,7 @@ export default function SalesModal({
   onClose, 
   onSave,
   onCancel,
+  onCancelMultiple,
   existingRecords = [],
   userRole = 'user',
   selectedApartments,
@@ -77,6 +174,7 @@ export default function SalesModal({
   const [selectedInstallment, setSelectedInstallment] = useState<number>(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState<number | null>(null)
+  const [confirmingMultiCancel, setConfirmingMultiCancel] = useState(false)
   const [formData, setFormData] = useState({
     customerName: '',
     customerPhone: '',
@@ -86,12 +184,37 @@ export default function SalesModal({
     notes: '',
   })
 
-  // When modal opens, initialize salePrice with apartment price
+  const numberOfSelectedApartments = selectedApartments?.size || 0
+
+  // When modal opens, initialize salePrice with apartment price (total for multiple) - ONLY on first open
   React.useEffect(() => {
-    if (apartment && isOpen) {
-      setFormData(prev => ({ ...prev, salePrice: apartment.price.toString() }))
+    if (isOpen && apartment) {
+      // Çoklu daire seçiliyse toplam fiyatı hesapla
+      if (selectedApartments && selectedApartments.size > 1 && apartments) {
+        const selectedApts = Array.from(selectedApartments)
+          .map(id => apartments.find(a => a.id === id))
+          .filter((apt): apt is Apartment => apt !== undefined)
+        const totalPrice = selectedApts.reduce((sum, apt) => sum + apt.price, 0)
+        setFormData(prev => ({ ...prev, salePrice: totalPrice.toString() }))
+      } else {
+        setFormData(prev => ({ ...prev, salePrice: apartment.price.toString() }))
+      }
+    } else if (!isOpen) {
+      // Modal kapandığında formu sıfırla
+      setFormData({
+        customerName: '',
+        customerPhone: '',
+        customerEmail: '',
+        paymentAmount: '',
+        salePrice: '',
+        notes: '',
+      })
+      setSelectedSaleType('reservation')
+      setSelectedInstallment(1)
+      setConfirmingCancel(null)
+      setConfirmingMultiCancel(false)
     }
-  }, [apartment, isOpen])
+  }, [isOpen])
 
   if (!isOpen || !apartment) return null
 
@@ -112,14 +235,16 @@ export default function SalesModal({
         return
       }
 
-      // Taksit planı hesapla (Faiz yok, ilk ödeme düşülü)
+      // Toplam satış fiyatını hesapla (çoklu daire için)
+      const selectedApts = aptIds.map(id => apartments.find(a => a.id === id) || apartment).filter(Boolean)
+      const totalPrice = formData.salePrice ? parseInt(formData.salePrice) : selectedApts.reduce((sum, apt) => sum + (apt?.price || 0), 0)
+      
+      // Taksit planı hesapla (Toplam tutar üzerinden, faiz yok)
       let installmentData = { months: 1, payment: 0 }
-      const firstApt = apartments.find(a => a.id === aptIds[0]) || apartment
-      if (selectedSaleType === 'sold' && selectedInstallment >= 1 && firstApt) {
+      if (selectedSaleType === 'sold' && selectedInstallment >= 1) {
         const depositAmount = formData.paymentAmount ? parseInt(formData.paymentAmount) : 0
-        const salePrice = formData.salePrice ? parseInt(formData.salePrice) : firstApt.price
         const plan = calculateInstallment(
-          salePrice,
+          totalPrice,
           depositAmount,
           selectedInstallment
         )
@@ -139,16 +264,19 @@ export default function SalesModal({
         notes: formData.notes,
       }))
 
-      // Her daire için detayları kaydet
-      const salePrice = formData.salePrice ? parseInt(formData.salePrice) : (apartment?.price || 0)
+      // Her daire için detayları kaydet (eşit pay)
+      const depositPerApt = (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0) / aptIds.length
+      const salePricePerApt = totalPrice / aptIds.length
+      const monthlyPaymentPerApt = installmentData.payment / aptIds.length
+      
       const detailsPayload = aptIds.map(aptId => ({
         apartmentId: aptId,
-        depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
-        salePrice,
+        depositAmount: depositPerApt,
+        salePrice: salePricePerApt,
         installmentMonths: selectedInstallment,
-        monthlyPayment: installmentData.payment,
+        monthlyPayment: monthlyPaymentPerApt,
         payments: [],
-        remainingBalance: salePrice - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0),
+        remainingBalance: salePricePerApt - depositPerApt,
       }))
 
       fetch('/api/sale-details', {
@@ -157,28 +285,7 @@ export default function SalesModal({
         body: JSON.stringify(detailsPayload),
       }).catch(err => console.error('Sale details save error:', err))
 
-      // WhatsApp mesajı gönder (sadece birinci daire için)
-      try {
-        const firstApart = apartments.find(a => a.id === aptIds[0]) || apartment
-        await fetch('/api/send-whatsapp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customerPhone: formData.customerPhone,
-            customerName: formData.customerName,
-            block: firstApart?.block || '',
-            apartmentNumber: firstApart?.number || '',
-            price: salePrice,
-            depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
-            saleType: selectedSaleType,
-            monthlyPayment: installmentData.payment,
-            installmentMonths: installmentData.months,
-          }),
-        })
-      } catch (err) {
-        console.log('WhatsApp mesajı gönderilemedi (opsiyonel):', err)
-        // Devam et
-      }
+      // WhatsApp mesajı BlockPage tarafından gönderilecek (çift mesaj önlemek için)
 
       // onSave callback'ini çağır - çoklu veya tek seçim
       if (saleDataArray.length > 1) {
@@ -202,13 +309,30 @@ export default function SalesModal({
     if (confirmingCancel === index) {
       // Onay verildiyse iptal et
       if (onCancel) {
-        onCancel(index)
+        // existingRecords[index] kaydını bul ve onun apartmentId'sini gönder
+        const recordToCancel = existingRecords[index]
+        if (recordToCancel) {
+          onCancel(recordToCancel.apartmentId)
+        }
         setConfirmingCancel(null)
-        alert('Satış işlemi başarıyla iptal edildi!')
       }
     } else {
       // İlk klik: onay iste
       setConfirmingCancel(index)
+    }
+  }
+
+  const handleCancelMultiple = () => {
+    if (confirmingMultiCancel) {
+      // Onay verildiyse çoklu iptal et
+      if (onCancelMultiple) {
+        onCancelMultiple()
+        setConfirmingMultiCancel(false)
+        alert(`${selectedApartments?.size || 0} dairenin satışı başarıyla iptal edildi!`)
+      }
+    } else {
+      // İlk klik: onay iste
+      setConfirmingMultiCancel(true)
     }
   }
 
@@ -340,6 +464,80 @@ export default function SalesModal({
             </div>
           </div>
 
+          {/* Çoklu Seçim Bilgileri ve İptal */}
+          {numberOfSelectedApartments > 1 && apartments && (
+            <div className="mb-8 p-4 bg-purple-50 rounded-lg border-2 border-purple-200">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📦</span>
+                  <h3 className="font-semibold text-purple-900">
+                    Çoklu Daire Seçimi - {numberOfSelectedApartments} Daire
+                  </h3>
+                </div>
+                {onCancelMultiple && userRole === 'admin' && existingRecords.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCancelMultiple}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      confirmingMultiCancel
+                        ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}
+                  >
+                    {confirmingMultiCancel ? '✓ Tümünü İptal Et - Onayla' : '✕ Tümünü İptal Et'}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {Array.from(selectedApartments || [])
+                  .map(aptId => apartments.find(a => a.id === aptId))
+                  .filter((apt): apt is Apartment => apt !== undefined)
+                  .map((apt, idx) => {
+                    const aptRecord = existingRecords.find(r => r.apartmentId === apt.id)
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-3 bg-white rounded border border-purple-100"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-purple-900">
+                            Blok {apt.block} - Daire {apt.number}
+                          </span>
+                          <span className="text-sm text-gray-600">{apt.type}</span>
+                          {aptRecord && (
+                            <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded">
+                              {aptRecord.customerName}
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-bold text-green-600">
+                          {new Intl.NumberFormat('tr-TR', {
+                            style: 'currency',
+                            currency: 'TRY',
+                            minimumFractionDigits: 0,
+                          }).format(apt.price)}
+                        </div>
+                      </div>
+                    )
+                  })}
+                <div className="pt-3 border-t border-purple-200 flex justify-between items-center">
+                  <span className="font-semibold text-purple-900">Toplam Tutar:</span>
+                  <span className="text-xl font-bold text-green-600">
+                    {new Intl.NumberFormat('tr-TR', {
+                      style: 'currency',
+                      currency: 'TRY',
+                      minimumFractionDigits: 0,
+                    }).format(
+                      Array.from(selectedApartments || [])
+                        .map(aptId => apartments.find(a => a.id === aptId)?.price || 0)
+                        .reduce((sum, price) => sum + price, 0)
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Satış Türü Seçimi */}
           <div className="mb-8">
             <h3 className="font-semibold text-gray-900 mb-4">Satış Türü Seçin</h3>
@@ -419,16 +617,35 @@ export default function SalesModal({
             {selectedSaleType !== 'reservation' && (
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Satış Fiyatı (TL)
+                    Satış Fiyatı (TL) {numberOfSelectedApartments > 1 && `(${numberOfSelectedApartments} Daire Toplam)`}
                   </label>
                   <input
                     type="number"
                     value={formData.salePrice}
-                    onChange={e => handleInputChange('salePrice', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+                    onChange={e => setFormData(prev => ({ ...prev, salePrice: e.target.value }))}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    style={{ pointerEvents: 'auto', cursor: 'text' }}
                   />
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {selectedSaleType === 'deposit' ? 'Kapora Tutarı' : 'Ödeme Tutarı'} (TL)
+                  {formData.salePrice > 0 && (
+                    <p className="text-sm text-blue-600 mt-1 mb-3">
+                      {new Intl.NumberFormat('tr-TR', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      }).format(formData.salePrice)} ({numberToText(formData.salePrice)})
+                      {numberOfSelectedApartments > 1 && (
+                        <span className="block text-purple-600 mt-1">
+                          Daire başına: {new Intl.NumberFormat('tr-TR', {
+                            style: 'currency',
+                            currency: 'TRY',
+                            minimumFractionDigits: 0,
+                          }).format(parseInt(formData.salePrice) / numberOfSelectedApartments)}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                <label className="block text-sm font-medium text-gray-700 mb-2 mt-3">
+                  {selectedSaleType === 'deposit' ? 'Kapora Tutarı' : 'Peşinat Tutarı'} (TL) {numberOfSelectedApartments > 1 && `(Toplam)`}
                 </label>
                 <input
                   type="number"
@@ -472,18 +689,44 @@ export default function SalesModal({
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <h4 className="font-semibold text-gray-900 mb-3">Taksit Özeti</h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div className="text-gray-600">Satış Fiyatı</div>
-                      <div className="font-bold text-gray-900">
-                        {new Intl.NumberFormat('tr-TR', {
-                          style: 'currency',
-                          currency: 'TRY',
-                          minimumFractionDigits: 0,
-                        }).format(formData.salePrice ? parseInt(formData.salePrice) : apartment.price)}
+                    {numberOfSelectedApartments > 1 && (
+                      <>
+                        <div className="col-span-2">
+                          <div className="text-gray-600">Tüm Daireler İçin Satış Fiyatı ({numberOfSelectedApartments} daire)</div>
+                          <div className="font-bold text-gray-900">
+                            {new Intl.NumberFormat('tr-TR', {
+                              style: 'currency',
+                              currency: 'TRY',
+                              minimumFractionDigits: 0,
+                            }).format(formData.salePrice ? parseInt(formData.salePrice) : apartment.price)}
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <div className="text-gray-600">Daire Başına Satış Fiyatı</div>
+                          <div className="font-bold text-blue-600">
+                            {new Intl.NumberFormat('tr-TR', {
+                              style: 'currency',
+                              currency: 'TRY',
+                              minimumFractionDigits: 0,
+                            }).format((formData.salePrice ? parseInt(formData.salePrice) : apartment.price) / numberOfSelectedApartments)}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {numberOfSelectedApartments === 1 && (
+                      <div>
+                        <div className="text-gray-600">Satış Fiyatı</div>
+                        <div className="font-bold text-gray-900">
+                          {new Intl.NumberFormat('tr-TR', {
+                            style: 'currency',
+                            currency: 'TRY',
+                            minimumFractionDigits: 0,
+                          }).format(formData.salePrice ? parseInt(formData.salePrice) : apartment.price)}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     <div>
-                      <div className="text-gray-600">İlk Ödeme</div>
+                      <div className="text-gray-600">{numberOfSelectedApartments > 1 ? 'Toplam İlk Ödeme' : 'İlk Ödeme'}</div>
                       <div className="font-bold text-green-600">
                         {new Intl.NumberFormat('tr-TR', {
                           style: 'currency',
@@ -492,8 +735,20 @@ export default function SalesModal({
                         }).format(formData.paymentAmount ? parseInt(formData.paymentAmount) : 0)}
                       </div>
                     </div>
+                    {numberOfSelectedApartments > 1 && (
+                      <div>
+                        <div className="text-gray-600">Daire Başına İlk Ödeme</div>
+                        <div className="font-bold text-green-600">
+                          {new Intl.NumberFormat('tr-TR', {
+                            style: 'currency',
+                            currency: 'TRY',
+                            minimumFractionDigits: 0,
+                          }).format((formData.paymentAmount ? parseInt(formData.paymentAmount) : 0) / numberOfSelectedApartments)}
+                        </div>
+                      </div>
+                    )}
                     <div>
-                      <div className="text-gray-600">Kalan Tutar</div>
+                      <div className="text-gray-600">{numberOfSelectedApartments > 1 ? 'Toplam Kalan Tutar' : 'Kalan Tutar'}</div>
                       <div className="font-bold text-gray-900">
                         {new Intl.NumberFormat('tr-TR', {
                             style: 'currency',
@@ -502,14 +757,26 @@ export default function SalesModal({
                           }).format(Math.max(0, (formData.salePrice ? parseInt(formData.salePrice) : apartment.price) - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0)))}
                       </div>
                     </div>
+                    {numberOfSelectedApartments > 1 && (
+                      <div>
+                        <div className="text-gray-600">Daire Başına Kalan Tutar</div>
+                        <div className="font-bold text-gray-900">
+                          {new Intl.NumberFormat('tr-TR', {
+                            style: 'currency',
+                            currency: 'TRY',
+                            minimumFractionDigits: 0,
+                          }).format(Math.max(0, ((formData.salePrice ? parseInt(formData.salePrice) : apartment.price) - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0)) / numberOfSelectedApartments))}
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <div className="text-gray-600">Taksit Sayısı</div>
                       <div className="font-bold text-blue-600">
                         {selectedInstallment} ay
                       </div>
                     </div>
-                    <div className="col-span-2">
-                      <div className="text-gray-600">Aylık Ödeme (Faiz Yok)</div>
+                    <div className={numberOfSelectedApartments > 1 ? '' : 'col-span-2'}>
+                      <div className="text-gray-600">{numberOfSelectedApartments > 1 ? 'Toplam Aylık Ödeme' : 'Aylık Ödeme (Faiz Yok)'}</div>
                       <div className="font-bold text-blue-600 text-lg">
                         {new Intl.NumberFormat('tr-TR', {
                           style: 'currency',
@@ -518,6 +785,18 @@ export default function SalesModal({
                         }).format(formData.paymentAmount ? Math.round(((formData.salePrice ? parseInt(formData.salePrice) : apartment.price) - parseInt(formData.paymentAmount)) / selectedInstallment) : (formData.salePrice ? parseInt(formData.salePrice) : apartment.price) / selectedInstallment)}
                       </div>
                     </div>
+                    {numberOfSelectedApartments > 1 && (
+                      <div>
+                        <div className="text-gray-600">Daire Başına Aylık Ödeme</div>
+                        <div className="font-bold text-blue-600 text-lg">
+                          {new Intl.NumberFormat('tr-TR', {
+                            style: 'currency',
+                            currency: 'TRY',
+                            minimumFractionDigits: 0,
+                          }).format((formData.paymentAmount ? Math.round(((formData.salePrice ? parseInt(formData.salePrice) : apartment.price) - parseInt(formData.paymentAmount)) / selectedInstallment) : (formData.salePrice ? parseInt(formData.salePrice) : apartment.price) / selectedInstallment) / numberOfSelectedApartments)}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

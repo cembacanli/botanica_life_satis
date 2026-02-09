@@ -152,6 +152,90 @@ export default function BlockPage() {
         )
       )
 
+      // WhatsApp bildirimi gönder (TEK MESAJ)
+      const firstData = dataArray[0]
+      const soldApartments = apartments.filter(apt => dataArray.some(d => d.apartmentId === apt.id))
+      
+      if (dataArray.length > 1) {
+        // Çoklu daire satışı
+        const totalPrice = soldApartments.reduce((sum, apt) => sum + apt.price, 0)
+        const apartmentNumbers = soldApartments.map(apt => apt.number)
+        const blocks = [...new Set(soldApartments.map(apt => apt.block))]
+
+        fetch('/api/send-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerPhone: firstData.customerPhone || '',
+            customerName: firstData.customerName || '',
+            block: blocks[0] || '',
+            apartmentNumber: apartmentNumbers[0] || 0,
+            price: totalPrice,
+            totalPrice: totalPrice,
+            depositAmount: firstData.paymentAmount || 0,
+            monthlyPayment: firstData.monthlyPayment || 0,
+            installmentMonths: firstData.installmentMonths || 0,
+            saleType: firstData.saleType || 'sold',
+            notificationType: 'sale',
+            isMultiple: true,
+            apartmentNumbers: apartmentNumbers,
+            blocks: blocks,
+          }),
+        })
+          .then(r => {
+            if (!r.ok) throw new Error(`WhatsApp API error: ${r.status}`)
+            return r.json()
+          })
+          .then(result => {
+            if (result?.success === false) {
+              console.warn('⚠️ WhatsApp error:', result?.message)
+              if (result?.error?.includes('LİMİT')) {
+                // Sandbox limit - bilgilendir ama satış başarılı
+                console.warn('📊 Satış kaydedildi ama WhatsApp mesajı gönderilemedi:', result?.error)
+              }
+            } else if (result?.success === true) {
+              console.log('✅ WhatsApp mesajı gönderildi')
+            }
+          })
+          .catch(err => console.log('📌 WhatsApp bildirim (opsiyonel):', err.message))
+      } else {
+        // Tekli daire satışı
+        const soldApt = soldApartments[0]
+        if (soldApt) {
+          fetch('/api/send-whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerPhone: firstData.customerPhone || '',
+              customerName: firstData.customerName || '',
+              block: soldApt.block || '',
+              apartmentNumber: soldApt.number || 0,
+              price: soldApt.price || 0,
+              depositAmount: firstData.paymentAmount || 0,
+              monthlyPayment: firstData.monthlyPayment || 0,
+              installmentMonths: firstData.installmentMonths || 0,
+              saleType: firstData.saleType || 'sold',
+              notificationType: 'sale',
+            }),
+          })
+            .then(r => {
+              if (!r.ok) throw new Error(`WhatsApp API error: ${r.status}`)
+              return r.json()
+            })
+            .then(result => {
+              if (result?.success === false) {
+                console.warn('⚠️ WhatsApp error:', result?.message)
+                if (result?.error?.includes('LİMİT')) {
+                  console.warn('📊 Satış kaydedildi ama WhatsApp mesajı gönderilemedi:', result?.error)
+                }
+              } else if (result?.success === true) {
+                console.log('✅ WhatsApp mesajı gönderildi')
+              }
+            })
+            .catch(err => console.log('📌 WhatsApp bildirim (opsiyonel):', err.message))
+        }
+      }
+
       setShowSalesModal(false)
       setSelectedApartment(null)
       setSelectedApartments(new Set())
@@ -161,71 +245,181 @@ export default function BlockPage() {
 
       // Başarı mesajı
       const count = dataArray.length
-      const firstData = dataArray[0]
       alert(
         `${firstData.customerName} için ${count} ${count > 1 ? 'daire' : 'dairenin'} ${firstData.saleType === 'reservation' ? 'Rezervasyonu' : firstData.saleType === 'deposit' ? 'Kaporası' : 'Satışı'} başarıyla kaydedildi!`
       )
     },
-    [salesRecords, multiSelectMode, selectedApartments]
+    [salesRecords, multiSelectMode, selectedApartments, apartments]
   )
 
   const handleCancelSale = useCallback(
-    (recordIndex: number) => {
-      if (!selectedApartment) return
+    (apartmentId: string) => {
+      if (!apartmentId) {
+        alert('Daire ID bulunamadı!')
+        return
+      }
 
-      // İptal edilecek satış kaydını al
-      const recordToCancel = salesRecords[recordIndex]
+      // İptal edilecek satış kaydını bul
+      const recordToCancel = salesRecords.find(rec => rec.apartmentId === apartmentId)
+      if (!recordToCancel) {
+        alert('Satış kaydı bulunamadı!')
+        return
+      }
 
-      // Satış kaydını sil
+      // İlk olarak satış kaydını sil (/api/sales)
       fetch('/api/sales', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apartmentId: recordToCancel.apartmentId }),
+        body: JSON.stringify({ apartmentId: apartmentId }),
       })
-        .then(r => r.json())
-        .then(data => setSalesRecords(Array.isArray(data) ? data : []))
-        .catch(err => console.error('Sales delete error:', err))
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`)
+          return r.json()
+        })
+        .then(data => {
+          // Sales kaydı başarıyla silindi
+          setSalesRecords(Array.isArray(data) ? data : [])
 
-      fetch('/api/sale-details', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apartmentId: recordToCancel.apartmentId }),
-      }).catch(err => console.error('Sale details delete error:', err))
+          // Satış detay kaydını sil
+          return fetch('/api/sale-details', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apartmentId: apartmentId }),
+          }).then(r => r.json())
+        })
+        .then(() => {
+          // Dairenin statusunu tekrar 'available' yap
+          setApartments(prevApts =>
+            prevApts.map(apt =>
+              apt.id === apartmentId
+                ? { ...apt, status: 'available' }
+                : apt
+            )
+          )
 
-      // Dairenin statusunu tekrar 'available' yap
-      setApartments(prevApts =>
-        prevApts.map(apt =>
-          apt.id === selectedApartment.id
-            ? { ...apt, status: 'available' }
-            : apt
+          // WhatsApp iptal bildirimi gönder
+          const apt = apartments.find(a => a.id === apartmentId)
+          if (apt) {
+            fetch('/api/send-whatsapp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerPhone: recordToCancel.customerPhone || '',
+                customerName: recordToCancel.customerName || 'Müşteri',
+                block: apt.block,
+                apartmentNumber: apt.number,
+                price: apt.price,
+                saleType: 'cancelled',
+                notificationType: 'cancellation',
+              }),
+            })
+              .then(r => r.json())
+              .then(result => {
+                if (result?.success === false) {
+                  console.warn('⚠️ WhatsApp error:', result?.message)
+                  if (result?.error?.includes('LİMİT')) {
+                    console.warn('📊 İptal kaydedildi ama WhatsApp mesajı gönderilemedi:', result?.error)
+                  }
+                } else if (result?.success === true) {
+                  console.log('✅ İptal WhatsApp mesajı gönderildi')
+                }
+              })
+              .catch(err => console.log('📌 WhatsApp bildirim (opsiyonel):', err))
+          }
+
+          // Modal'ı kapat
+          setShowSalesModal(false)
+          setSelectedApartment(null)
+          alert('✓ Satış işlemi başarıyla iptal edildi!')
+        })
+        .catch(err => {
+          console.error('Cancel error:', err)
+          alert('❌ İptal işlemi başarısız: ' + err.message)
+        })
+    },
+    [salesRecords, apartments]
+  )
+
+  const handleCancelMultiple = useCallback(() => {
+    if (!selectedApartments || selectedApartments.size === 0) return
+
+    // Seçili dairelerin satış kayıtlarını al
+    const selectedAptIds = Array.from(selectedApartments)
+    const cancelRecords = salesRecords.filter(rec => selectedAptIds.includes(rec.apartmentId))
+
+    if (cancelRecords.length === 0) {
+      alert('Seçili dairelerde iptal edilecek satış kaydı bulunamadı!')
+      return
+    }
+
+    // Tüm satış kayıtlarını sil
+    const deletePromises = cancelRecords.map(record =>
+      Promise.all([
+        fetch('/api/sales', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apartmentId: record.apartmentId }),
+        }),
+        fetch('/api/sale-details', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apartmentId: record.apartmentId }),
+        }),
+      ])
+    )
+
+    Promise.all(deletePromises)
+      .then(() => {
+        // Satış kayıtlarını yenile
+        fetchSalesRecords()
+
+        // Dairelerin statusunu 'available' yap
+        setApartments(prevApts =>
+          prevApts.map(apt =>
+            selectedAptIds.includes(apt.id)
+              ? { ...apt, status: 'available' }
+              : apt
+          )
         )
-      )
 
-      // WhatsApp iptal bildirimi gönder
-      try {
+        // Çoklu WhatsApp iptal bildirimi gönder
+        const cancelledApts = apartments.filter(apt => selectedAptIds.includes(apt.id))
+        const totalPrice = cancelledApts.reduce((sum, apt) => sum + apt.price, 0)
+        const apartmentNumbers = cancelledApts.map(apt => apt.number)
+        const blocks = [...new Set(cancelledApts.map(apt => apt.block))]
+        const firstRecord = cancelRecords[0]
+
         fetch('/api/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            customerPhone: recordToCancel.customerPhone,
-            customerName: recordToCancel.customerName,
-            block: selectedApartment.block,
-            apartmentNumber: selectedApartment.number,
-            price: selectedApartment.price,
+            customerPhone: firstRecord.customerPhone,
+            customerName: firstRecord.customerName,
+            block: blocks[0],
+            apartmentNumber: apartmentNumbers[0],
+            price: totalPrice,
+            totalPrice: totalPrice,
             saleType: 'cancelled',
             notificationType: 'cancellation',
+            isMultiple: true,
+            apartmentNumbers: apartmentNumbers,
+            blocks: blocks,
           }),
         }).catch(err => console.log('WhatsApp mesajı gönderilemedi (opsiyonel):', err))
-      } catch (err) {
-        console.log('WhatsApp mesajı gönderilemedi (opsiyonel):', err)
-      }
 
-      // Modal'ı kapat ve seçimi temizle
-      setShowSalesModal(false)
-      setSelectedApartment(null)
-    },
-    [salesRecords, selectedApartment]
-  )
+        // Modal'ı kapat ve seçimleri temizle
+        setShowSalesModal(false)
+        setSelectedApartment(null)
+        setSelectedApartments(new Set())
+        setMultiSelectMode(false)
+
+        alert(`${cancelRecords.length} dairenin satışı başarıyla iptal edildi!`)
+      })
+      .catch(err => {
+        console.error('Multiple cancel error:', err)
+        alert('İptal işlemi sırasında hata oluştu!')
+      })
+  }, [selectedApartments, salesRecords, apartments])
 
   // İstatistik hesaplama fonksiyonları
   const calculateBlockStats = (blockLetter: string) => {
@@ -518,12 +712,25 @@ export default function BlockPage() {
                   .map((apt, idx) => {
                     const saleInfo = getSalesInfo(apt.id)
                     const statusBadge = getStatusBadge(apt.status)
+                    const isSelected = selectedApartments.has(apt.id)
 
                     return (
                       <div
                         key={idx}
-                        className={`rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${getStatusColor(apt.status)}`}
+                        onClick={() => multiSelectMode && apt.status === 'available' && handleApartmentClick(apt)}
+                        className={`relative rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${
+                          isSelected 
+                            ? 'border-4 border-blue-600 bg-blue-50' 
+                            : getStatusColor(apt.status)
+                        } ${multiSelectMode && apt.status === 'available' ? 'cursor-pointer hover:scale-105' : ''}`}
                       >
+                        {/* Selection Indicator */}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg z-10">
+                            ✓
+                          </div>
+                        )}
+                        
                         {/* Card Header */}
                         <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4">
                           <div className="flex items-start justify-between mb-2">
@@ -579,7 +786,7 @@ export default function BlockPage() {
 
                           {/* Buton */}
                           <button
-                            onClick={() => handleApartmentClick(apt)}
+                            onClick={() => { setSelectedApartment(apt); setShowSalesModal(true) }}
                             disabled={apt.status !== 'available' && currentUser?.role !== 'admin'}
                             className={`w-full py-3 rounded-lg font-medium transition-all ${
                               apt.status === 'available' || currentUser?.role === 'admin'
@@ -605,12 +812,25 @@ export default function BlockPage() {
                   .map((apt, idx) => {
                     const saleInfo = getSalesInfo(apt.id)
                     const statusBadge = getStatusBadge(apt.status)
+                    const isSelected = selectedApartments.has(apt.id)
 
                     return (
                       <div
                         key={idx}
-                        className={`rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${getStatusColor(apt.status)}`}
+                        onClick={() => multiSelectMode && apt.status === 'available' && handleApartmentClick(apt)}
+                        className={`relative rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${
+                          isSelected 
+                            ? 'border-4 border-blue-600 bg-blue-50' 
+                            : getStatusColor(apt.status)
+                        } ${multiSelectMode && apt.status === 'available' ? 'cursor-pointer hover:scale-105' : ''}`}
                       >
+                        {/* Selection Indicator */}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg z-10">
+                            ✓
+                          </div>
+                        )}
+                        
                         {/* Card Header */}
                         <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4">
                           <div className="flex items-start justify-between mb-2">
@@ -666,7 +886,7 @@ export default function BlockPage() {
 
                           {/* Buton */}
                           <button
-                            onClick={() => handleApartmentClick(apt)}
+                            onClick={() => { setSelectedApartment(apt); setShowSalesModal(true) }}
                             disabled={apt.status !== 'available' && currentUser?.role !== 'admin'}
                             className={`w-full py-3 rounded-lg font-medium transition-all ${
                               apt.status === 'available' || currentUser?.role === 'admin'
@@ -695,12 +915,25 @@ export default function BlockPage() {
                   .map((apt, idx) => {
                     const saleInfo = getSalesInfo(apt.id)
                     const statusBadge = getStatusBadge(apt.status)
+                    const isSelected = selectedApartments.has(apt.id)
 
                     return (
                       <div
                         key={idx}
-                        className={`rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${getStatusColor(apt.status)}`}
+                        onClick={() => multiSelectMode && apt.status === 'available' && handleApartmentClick(apt)}
+                        className={`relative rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${
+                          isSelected 
+                            ? 'border-4 border-blue-600 bg-blue-50' 
+                            : getStatusColor(apt.status)
+                        } ${multiSelectMode && apt.status === 'available' ? 'cursor-pointer hover:scale-105' : ''}`}
                       >
+                        {/* Selection Indicator */}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg z-10">
+                            ✓
+                          </div>
+                        )}
+                        
                         {/* Card Header */}
                         <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4">
                           <div className="flex items-start justify-between mb-2">
@@ -756,7 +989,7 @@ export default function BlockPage() {
 
                           {/* Buton */}
                           <button
-                            onClick={() => handleApartmentClick(apt)}
+                            onClick={() => { setSelectedApartment(apt); setShowSalesModal(true) }}
                             disabled={apt.status !== 'available' && currentUser?.role !== 'admin'}
                             className={`w-full py-3 rounded-lg font-medium transition-all ${
                               apt.status === 'available' || currentUser?.role === 'admin'
@@ -782,12 +1015,25 @@ export default function BlockPage() {
                   .map((apt, idx) => {
                     const saleInfo = getSalesInfo(apt.id)
                     const statusBadge = getStatusBadge(apt.status)
+                    const isSelected = selectedApartments.has(apt.id)
 
                     return (
                       <div
                         key={idx}
-                        className={`rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${getStatusColor(apt.status)}`}
+                        onClick={() => multiSelectMode && apt.status === 'available' && handleApartmentClick(apt)}
+                        className={`relative rounded-lg shadow-md border-2 overflow-hidden transition-all hover:shadow-lg ${
+                          isSelected 
+                            ? 'border-4 border-blue-600 bg-blue-50' 
+                            : getStatusColor(apt.status)
+                        } ${multiSelectMode && apt.status === 'available' ? 'cursor-pointer hover:scale-105' : ''}`}
                       >
+                        {/* Selection Indicator */}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg z-10">
+                            ✓
+                          </div>
+                        )}
+                        
                         {/* Card Header */}
                         <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4">
                           <div className="flex items-start justify-between mb-2">
@@ -843,7 +1089,7 @@ export default function BlockPage() {
 
                           {/* Buton */}
                           <button
-                            onClick={() => handleApartmentClick(apt)}
+                            onClick={() => { setSelectedApartment(apt); setShowSalesModal(true) }}
                             disabled={apt.status !== 'available' && currentUser?.role !== 'admin'}
                             className={`w-full py-3 rounded-lg font-medium transition-all ${
                               apt.status === 'available' || currentUser?.role === 'admin'
@@ -965,6 +1211,7 @@ export default function BlockPage() {
         onClose={handleModalClose}
         onSave={handleSalesSubmit}
         onCancel={handleCancelSale}
+        onCancelMultiple={handleCancelMultiple}
         existingRecords={selectedApartment ? salesRecords.filter(r => r.apartmentId === selectedApartment.id) : []}
         userRole={currentUser?.role || 'user'}
         selectedApartments={multiSelectMode ? selectedApartments : undefined}

@@ -29,6 +29,10 @@ export default function InstallmentsPage() {
   const [pendingPayment, setPendingPayment] = useState<{ apartmentId: string; amount: number; label: string } | null>(null)
   const [manageModalOpen, setManageModalOpen] = useState(false)
   const [selectedAptForManage, setSelectedAptForManage] = useState<string | null>(null)
+  
+  // Taksit seçim modal
+  const [installmentSelectOpen, setInstallmentSelectOpen] = useState(false)
+  const [selectedAptForInstallment, setSelectedAptForInstallment] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -152,6 +156,11 @@ export default function InstallmentsPage() {
     details.monthlyPayment = data.monthlyPayment
     details.installmentMonths = data.installmentMonths
     details.paymentMethod = data.paymentMethod
+    
+    // Taksit çizelgesini kaydet
+    if (data.installmentSchedule && data.installmentSchedule.length > 0) {
+      details.installmentSchedule = data.installmentSchedule
+    }
 
     setSaleDetailsMap(prev => ({ ...prev, [selectedAptForManage]: details }))
     fetch('/api/sale-details', {
@@ -286,7 +295,7 @@ export default function InstallmentsPage() {
               <div className="mt-4 flex gap-2 flex-wrap">
                 <input value={selectedApt === rec.apartmentId ? payAmount : ''} onChange={e => { setSelectedApt(rec.apartmentId); setPayAmount(e.target.value) }} className="px-3 py-2 border rounded w-56" placeholder="Ara ödeme tutarı" />
                 <button onClick={() => { const amt = parseInt(payAmount || '0'); if (!amt || amt <= 0) return alert('Geçerli bir tutar girin'); openPaymentModal(rec.apartmentId, amt, 'Ara Ödeme') }} className="px-4 py-2 bg-blue-600 text-white rounded">Ara Ödeme Kaydet</button>
-                <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); const amt = details.monthlyPayment || Math.round((details.salePrice - (details.depositAmount || 0)) / (details.installmentMonths || 1)); openPaymentModal(rec.apartmentId, amt, 'Aylık Ödeme') }} className="px-4 py-2 bg-green-600 text-white rounded">Aylık Ödeme Al</button>
+                <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); setSelectedAptForInstallment(rec.apartmentId); setInstallmentSelectOpen(true) }} className="px-4 py-2 bg-green-600 text-white rounded">Aylık Ödeme Al</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); const remaining = details.remainingBalance || (details.salePrice - (details.depositAmount || 0)); if (!remaining || remaining <= 0) return alert('Ödenecek bakiye yok'); openPaymentModal(rec.apartmentId, remaining, 'Tamamını Öde') }} className="px-4 py-2 bg-red-600 text-white rounded">Tamamını Öde</button>
                 <button onClick={() => handleManageInstallment(rec.apartmentId)} className="px-4 py-2 bg-purple-600 text-white rounded">⚙️ Taksit Bilgileri</button>
                 <div className="ml-auto text-sm text-gray-400">Son Ödemeler:</div>
@@ -306,12 +315,55 @@ export default function InstallmentsPage() {
                   <div className="text-sm text-gray-600 mb-2">Taksit Çizelgesi</div>
                   <div className="flex gap-2 flex-wrap">
                     {Array.from({ length: details.installmentMonths }).map((_, mIdx) => {
+                      // Schedule varsa onu kullan, yoksa monthlyPayment kullan
+                      const installmentAmount = details.installmentSchedule 
+                        ? (details.installmentSchedule[mIdx] || 0)
+                        : details.monthlyPayment
+                      
+                      // Taksit tarihini hesapla
+                      const startDate = details.startDate ? new Date(details.startDate) : new Date()
+                      const installmentDate = new Date(startDate)
+                      installmentDate.setMonth(installmentDate.getMonth() + mIdx)
+                      
+                      // Gecikme kontrolü
+                      const today = new Date()
+                      today.setHours(0, 0, 0, 0)
+                      installmentDate.setHours(0, 0, 0, 0)
+                      const isDelayed = installmentDate < today
+                      
                       const paidFromPayments = (details.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
                       const installmentsPaid = Math.floor(paidFromPayments / details.monthlyPayment)
                       const isPaid = mIdx < installmentsPaid
+                      
                       return (
-                        <div key={mIdx} className={`px-3 py-1 rounded-full text-sm ${isPaid ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
-                          {mIdx + 1}. Ay {isPaid ? '✓' : '—'}
+                        <div key={mIdx} className="text-center">
+                          <div className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[110px] border ${
+                            isPaid 
+                              ? 'bg-green-100 text-green-800 border-green-300' 
+                              : isDelayed
+                              ? 'bg-red-100 text-red-800 border-red-300'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            <div className="text-xs opacity-80 font-semibold">
+                              {installmentDate.toLocaleDateString('tr-TR', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </div>
+                            <div className="font-bold text-sm">
+                              {new Intl.NumberFormat('tr-TR', {
+                                style: 'currency',
+                                currency: 'TRY',
+                                minimumFractionDigits: 0,
+                              }).format(installmentAmount)}
+                            </div>
+                            {isPaid && <div className="text-xs mt-1">✓ Ödendi</div>}
+                          </div>
+                          {isDelayed && !isPaid && (
+                            <div className="text-xs text-red-600 font-bold mt-1 text-center">
+                              ⚠️ Gecikme Var
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -324,12 +376,176 @@ export default function InstallmentsPage() {
       </div>
 
       {/* Taksit Yönetim Modal */}
-      <InstallmentManageModal
-        isOpen={manageModalOpen}
-        onClose={() => setManageModalOpen(false)}
-        onSave={handleSaveInstallment}
-        currentData={selectedAptForManage ? getSaleDetails(selectedAptForManage) : undefined}
-      />
-      </div>    </div>
+      {selectedAptForManage && (() => {
+        const saleDetails = getSaleDetails(selectedAptForManage)
+        const enrichedData = saleDetails ? {
+          ...saleDetails,
+          totalDebt: saleDetails.salePrice || 0, // Toplam Borç = Satış Fiyatı
+          paidAmount: (saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0), // İlk Kapora + Tüm Ödemeler
+          remainingBalance: (saleDetails.salePrice || 0) - ((saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0)) // Kalan = Satış Fiyatı - Yapılan Ödemeler
+        } : undefined
+        
+        return (
+          <InstallmentManageModal
+            isOpen={manageModalOpen}
+            onClose={() => setManageModalOpen(false)}
+            onSave={handleSaveInstallment}
+            currentData={enrichedData}
+          />
+        )
+      })()}
+      {!selectedAptForManage && (
+        <InstallmentManageModal
+          isOpen={manageModalOpen}
+          onClose={() => setManageModalOpen(false)}
+          onSave={handleSaveInstallment}
+          currentData={undefined}
+        />
+      )}
+      
+      {/* Taksit Seçim Modal */}
+      {installmentSelectOpen && selectedAptForInstallment && (() => {
+        const details = getSaleDetails(selectedAptForInstallment)
+        const installmentSchedule = details?.installmentSchedule || []
+        const paidAmount = (details?.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0)
+        
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg max-w-md w-full mx-4 shadow-2xl">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-t-lg">
+                <h2 className="text-lg font-bold">Hangi Taksiti Ödemek İstiyorsunuz?</h2>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
+                {installmentSchedule.length > 0 ? (
+                  // Özel taksit çizelgesi varsa
+                  installmentSchedule.map((amount, index) => {
+                    const startDate = details?.startDate ? new Date(details.startDate) : new Date()
+                    const dueDate = new Date(startDate)
+                    dueDate.setMonth(dueDate.getMonth() + index)
+                    
+                    const paymentDate = new Date()
+                    const alreadyPaid = paidAmount >= (installmentSchedule.slice(0, index + 1).reduce((a, b) => a + b, 0))
+                    
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => {
+                          if (alreadyPaid) {
+                            alert('Bu taksit zaten ödenmiş.')
+                            return
+                          }
+                          openPaymentModal(selectedAptForInstallment, amount, `${index + 1}. Taksit`)
+                          setInstallmentSelectOpen(false)
+                        }}
+                        disabled={alreadyPaid}
+                        className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
+                          alreadyPaid
+                            ? 'bg-gray-50 border-gray-300 cursor-not-allowed opacity-50'
+                            : 'bg-green-50 border-green-300 hover:bg-green-100 hover:border-green-500 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-bold text-gray-800">
+                              {index + 1}. Taksit
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {dueDate.toLocaleDateString('tr-TR', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-green-600">
+                              {new Intl.NumberFormat('tr-TR', {
+                                style: 'currency',
+                                currency: 'TRY',
+                                minimumFractionDigits: 0,
+                              }).format(amount)}
+                            </div>
+                            {alreadyPaid && <div className="text-xs text-gray-500">✓ Ödendi</div>}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })
+                ) : (
+                  // Standart aylık ödeme
+                  Array.from({ length: details?.installmentMonths || 1 }).map((_, index) => {
+                    const monthlyPayment = details?.monthlyPayment || 0
+                    const startDate = details?.startDate ? new Date(details.startDate) : new Date()
+                    const dueDate = new Date(startDate)
+                    dueDate.setMonth(dueDate.getMonth() + index)
+                    
+                    const alreadyPaid = paidAmount >= (monthlyPayment * (index + 1))
+                    
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => {
+                          if (alreadyPaid) {
+                            alert('Bu taksit zaten ödenmiş.')
+                            return
+                          }
+                          openPaymentModal(selectedAptForInstallment, monthlyPayment, `${index + 1}. Taksit`)
+                          setInstallmentSelectOpen(false)
+                        }}
+                        disabled={alreadyPaid}
+                        className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
+                          alreadyPaid
+                            ? 'bg-gray-50 border-gray-300 cursor-not-allowed opacity-50'
+                            : 'bg-green-50 border-green-300 hover:bg-green-100 hover:border-green-500 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-bold text-gray-800">
+                              {index + 1}. Taksit
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {dueDate.toLocaleDateString('tr-TR', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-green-600">
+                              {new Intl.NumberFormat('tr-TR', {
+                                style: 'currency',
+                                currency: 'TRY',
+                                minimumFractionDigits: 0,
+                              }).format(monthlyPayment)}
+                            </div>
+                            {alreadyPaid && <div className="text-xs text-gray-500">✓ Ödendi</div>}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 px-6 py-4 rounded-b-lg border-t flex justify-end">
+                <button
+                  onClick={() => setInstallmentSelectOpen(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+      </div>
+    </div>
   )
 }

@@ -406,7 +406,7 @@ export default function InstallmentsPage() {
       {/* Taksit Seçim Modal */}
       {installmentSelectOpen && selectedAptForInstallment && (() => {
         const details = getSaleDetails(selectedAptForInstallment)
-        const installmentSchedule = details?.installmentSchedule || []
+        const installmentSchedule = (details?.installmentSchedule || []) as number[]
         const paidAmount = (details?.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)
         
         return (
@@ -421,7 +421,7 @@ export default function InstallmentsPage() {
               <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
                 {installmentSchedule.length > 0 ? (
                   // Özel taksit çizelgesi varsa
-                  installmentSchedule.map((amount, index) => {
+                  installmentSchedule.map((amount: number, index: number) => {
                     const startDate = details?.startDate ? new Date(details.startDate) : new Date()
                     const dueDate = new Date(startDate)
                     dueDate.setMonth(dueDate.getMonth() + index)

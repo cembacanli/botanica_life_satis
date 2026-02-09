@@ -26,8 +26,8 @@ export default function LoginPage() {
     setIsLoading(true)
 
     // Biraz gecikme ekle (UX için)
-    setTimeout(() => {
-      if (login(username, password)) {
+    setTimeout(async () => {
+      if (await login(username, password)) {
         router.push('/')
       } else {
         setError('Kullanıcı adı veya şifre yanlış!')

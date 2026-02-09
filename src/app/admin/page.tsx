@@ -32,12 +32,12 @@ export default function AdminPage() {
     }
   }, [isAuthenticated, loading, user, router])
 
-  const loadUsers = () => {
-    const allUsers = getAllUsers()
+  const loadUsers = async () => {
+    const allUsers = await getAllUsers()
     setUsers(allUsers)
   }
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccess('')
@@ -52,27 +52,27 @@ export default function AdminPage() {
       return
     }
 
-    if (addUser(newUsername, newPassword, newRole)) {
+    if (await addUser(newUsername, newPassword, newRole)) {
       setSuccess(`${newUsername} başarıyla eklendi!`)
       setNewUsername('')
       setNewPassword('')
       setNewRole('user')
-      loadUsers()
+      await loadUsers()
     } else {
       setError('Bu kullanıcı adı zaten kullanılıyor!')
     }
   }
 
-  const handleDeleteUser = (userId: string, username: string) => {
+  const handleDeleteUser = async (userId: string, username: string) => {
     if (userId === user?.id) {
       setError('Kendi hesabınızı silemezsiniz!')
       return
     }
 
     if (confirm(`${username} kullanıcısını silmek istediğinizden emin misiniz?`)) {
-      if (deleteUser(userId)) {
+      if (await deleteUser(userId)) {
         setSuccess(`${username} başarıyla silindi!`)
-        loadUsers()
+        await loadUsers()
       } else {
         setError('Kullanıcı silinirken bir hata oluştu!')
       }

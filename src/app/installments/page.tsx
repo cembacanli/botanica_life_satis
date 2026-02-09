@@ -381,8 +381,8 @@ export default function InstallmentsPage() {
         const enrichedData = saleDetails ? {
           ...saleDetails,
           totalDebt: saleDetails.salePrice || 0, // Toplam Borç = Satış Fiyatı
-          paidAmount: (saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0), // İlk Kapora + Tüm Ödemeler
-          remainingBalance: (saleDetails.salePrice || 0) - ((saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0)) // Kalan = Satış Fiyatı - Yapılan Ödemeler
+          paidAmount: (saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0), // İlk Kapora + Tüm Odemeler
+          remainingBalance: (saleDetails.salePrice || 0) - ((saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)) // Kalan = Satis Fiyati - Yapilan Odemeler
         } : undefined
         
         return (
@@ -407,7 +407,7 @@ export default function InstallmentsPage() {
       {installmentSelectOpen && selectedAptForInstallment && (() => {
         const details = getSaleDetails(selectedAptForInstallment)
         const installmentSchedule = details?.installmentSchedule || []
-        const paidAmount = (details?.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0)
+        const paidAmount = (details?.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)
         
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

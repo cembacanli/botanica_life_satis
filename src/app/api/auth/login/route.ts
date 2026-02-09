@@ -3,6 +3,41 @@ import { supabase } from '@/lib/supabase'
 
 const USER_TABLE = 'app_users'
 
+const DEFAULT_USERS = [
+  {
+    username: 'cem',
+    password: '2127030cem',
+    role: 'admin',
+    created_at: new Date().toISOString(),
+  },
+  {
+    username: 'satis1',
+    password: '2127030satis1',
+    role: 'user',
+    created_at: new Date().toISOString(),
+  },
+  {
+    username: 'satis2',
+    password: '2127030satis2',
+    role: 'user',
+    created_at: new Date().toISOString(),
+  },
+]
+
+async function ensureSeeded() {
+  const { data, error } = await supabase.from(USER_TABLE).select('id').limit(1)
+  if (error) {
+    throw error
+  }
+
+  if (!data || data.length === 0) {
+    const { error: insertError } = await supabase.from(USER_TABLE).insert(DEFAULT_USERS)
+    if (insertError) {
+      throw insertError
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -12,6 +47,8 @@ export async function POST(request: NextRequest) {
     if (!username || !password) {
       return NextResponse.json({ error: 'username and password required' }, { status: 400 })
     }
+
+    await ensureSeeded()
 
     const { data, error } = await supabase
       .from(USER_TABLE)

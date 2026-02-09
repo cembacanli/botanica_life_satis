@@ -141,18 +141,21 @@ export default function SalesModal({
 
       // Her daire için detayları kaydet
       const salePrice = formData.salePrice ? parseInt(formData.salePrice) : (apartment?.price || 0)
-      aptIds.forEach(aptId => {
-        const saleDetails = {
-          apartmentId: aptId,
-          depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
-          salePrice,
-          installmentMonths: selectedInstallment,
-          monthlyPayment: installmentData.payment,
-          payments: [],
-          remainingBalance: salePrice - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0),
-        }
-        localStorage.setItem(`saleDetails_${aptId}`, JSON.stringify(saleDetails))
-      })
+      const detailsPayload = aptIds.map(aptId => ({
+        apartmentId: aptId,
+        depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
+        salePrice,
+        installmentMonths: selectedInstallment,
+        monthlyPayment: installmentData.payment,
+        payments: [],
+        remainingBalance: salePrice - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0),
+      }))
+
+      fetch('/api/sale-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(detailsPayload),
+      }).catch(err => console.error('Sale details save error:', err))
 
       // WhatsApp mesajı gönder (sadece birinci daire için)
       try {

@@ -60,6 +60,7 @@ export default function Dashboard() {
   const [mounted, setMounted] = useState(false)
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<any[]>([])
+  const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
 
   useEffect(() => {
     setMounted(true)
@@ -82,9 +83,38 @@ export default function Dashboard() {
         setApartments([])
       })
 
-    const saved = localStorage.getItem('salesRecords')
-    if (saved) setSalesRecords(JSON.parse(saved))
+    fetch('/api/sales')
+      .then(r => r.json())
+      .then((data) => setSalesRecords(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error('Error loading sales:', err)
+        setSalesRecords([])
+      })
+
+    fetch('/api/sale-details')
+      .then(r => r.json())
+      .then((data) => setSaleDetailsMap(data || {}))
+      .catch((err) => {
+        console.error('Error loading sale details:', err)
+        setSaleDetailsMap({})
+      })
   }, [isAuthenticated, loading, router])
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetch('/api/sales')
+        .then(r => r.json())
+        .then((data) => setSalesRecords(Array.isArray(data) ? data : []))
+        .catch(() => undefined)
+
+      fetch('/api/sale-details')
+        .then(r => r.json())
+        .then((data) => setSaleDetailsMap(data || {}))
+        .catch(() => undefined)
+    }, 3000)
+
+    return () => clearInterval(intervalId)
+  }, [])
 
   const handleBlockClick = (blockName: string) => {
     router.push(`/blocks/${blockName}`)
@@ -282,12 +312,12 @@ export default function Dashboard() {
               })
 
               const totalRevenue = blockSales.reduce((sum: number, rec: any) => {
-                const saleData = JSON.parse(localStorage.getItem('saleDetails_' + rec.apartmentId) || '{}')
+                const saleData = saleDetailsMap[rec.apartmentId] || {}
                 return sum + (saleData.salePrice || 0)
               }, 0)
 
               const totalDeposit = blockSales.reduce((sum: number, rec: any) => {
-                const saleData = JSON.parse(localStorage.getItem('saleDetails_' + rec.apartmentId) || '{}')
+                const saleData = saleDetailsMap[rec.apartmentId] || {}
                 const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
                 return sum + (saleData.depositAmount || 0) + payments
               }, 0)
@@ -314,7 +344,7 @@ export default function Dashboard() {
                   <div className="text-sm text-gray-300 mt-1">Peşinatlar / Kalan</div>
                   <div className="text-sm text-gray-200">
                     {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(totalDeposit)} / {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(blockSales.reduce((sum:number, rec:any) => {
-                      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + rec.apartmentId) || '{}')
+                      const saleData = saleDetailsMap[rec.apartmentId] || {}
                       return sum + (saleData.remainingBalance || ((saleData.salePrice || 0) - (saleData.depositAmount || 0)))
                     }, 0))}
                   </div>
@@ -338,7 +368,7 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold text-green-300">
                   {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(
                     salesRecords.filter((rec: any) => rec.saleType === 'sold').reduce((sum: number, rec: any) => {
-                      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + rec.apartmentId) || '{}')
+                      const saleData = saleDetailsMap[rec.apartmentId] || {}
                       return sum + (saleData.salePrice || 0)
                     }, 0)
                   )}
@@ -349,7 +379,7 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold text-orange-300">
                   {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(
                     salesRecords.filter((rec: any) => rec.saleType === 'sold').reduce((sum: number, rec: any) => {
-                      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + rec.apartmentId) || '{}')
+                      const saleData = saleDetailsMap[rec.apartmentId] || {}
                       const payments = (saleData.payments || []).reduce((s:number,p:any)=>s+(p.amount||0),0)
                       return sum + (saleData.depositAmount || 0) + payments
                     }, 0)
@@ -361,7 +391,7 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold text-red-300">
                   {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(
                     salesRecords.filter((rec: any) => rec.saleType === 'sold').reduce((sum: number, rec: any) => {
-                      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + rec.apartmentId) || '{}')
+                      const saleData = saleDetailsMap[rec.apartmentId] || {}
                       return sum + (saleData.remainingBalance || ((saleData.salePrice || 0) - (saleData.depositAmount || 0)))
                     }, 0)
                   )}

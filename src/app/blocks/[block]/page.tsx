@@ -22,6 +22,7 @@ export default function BlockPage() {
 
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
+  const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null)
   const [selectedApartments, setSelectedApartments] = useState<Set<string>>(new Set())
@@ -30,24 +31,51 @@ export default function BlockPage() {
   const [multiSelectMode, setMultiSelectMode] = useState(false)
 
   useEffect(() => {
-    fetchApartments()
-  }, [])
-
-  // Apartments yüklendikten sonra satış kayıtlarını yükle ve senkronize et
-  useEffect(() => {
-    if (apartments.length > 0) {
-      loadSalesRecords()
+    const loadAll = async () => {
+      try {
+        const records = await fetchSalesRecords()
+        await fetchSaleDetails()
+        await fetchApartments(records)
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [apartments.length])
 
-  const fetchApartments = async () => {
+    loadAll()
+  }, [blockName])
+
+  const fetchSalesRecords = async () => {
+    try {
+      const response = await fetch('/api/sales')
+      const data = await response.json()
+      const records = Array.isArray(data) ? data : []
+      setSalesRecords(records)
+      return records
+    } catch (error) {
+      console.error('Error fetching sales records:', error)
+      setSalesRecords([])
+      return []
+    }
+  }
+
+  const fetchSaleDetails = async () => {
+    try {
+      const response = await fetch('/api/sale-details')
+      const data = await response.json()
+      setSaleDetailsMap(data || {})
+      return data
+    } catch (error) {
+      console.error('Error fetching sale details:', error)
+      setSaleDetailsMap({})
+      return {}
+    }
+  }
+
+  const fetchApartments = async (recordsOverride?: SalesRecord[]) => {
     try {
       const response = await fetch(`/api/apartments?block=${blockName}`)
       const data = await response.json()
-      
-      // localStorage'dan satış kayıtlarını oku
-      const saved = localStorage.getItem('salesRecords')
-      const records = saved ? JSON.parse(saved) : []
+      const records = recordsOverride || salesRecords
       
       // Apartment status'larını güncelle
       const updatedData = data.map((apt: Apartment) => {
@@ -60,39 +88,18 @@ export default function BlockPage() {
       })
       
       setApartments(updatedData)
-      setSalesRecords(records)
     } catch (error) {
       console.error('Error fetching apartments:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
-  const loadSalesRecords = () => {
-    const saved = localStorage.getItem('salesRecords')
-    if (saved) {
-      setSalesRecords(JSON.parse(saved))
-    }
-  }
-
-  // Listen to salesRecords changes from localStorage
   useEffect(() => {
-    const handleStorageChange = () => {
-      const saved = localStorage.getItem('salesRecords')
-      if (saved) setSalesRecords(JSON.parse(saved))
-    }
+    const intervalId = setInterval(() => {
+      fetchSalesRecords()
+      fetchSaleDetails()
+    }, 3000)
 
-    const handleFocus = () => {
-      const saved = localStorage.getItem('salesRecords')
-      if (saved) setSalesRecords(JSON.parse(saved))
-    }
-
-    window.addEventListener('storage', handleStorageChange)
-    window.addEventListener('focus', handleFocus)
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('focus', handleFocus)
-    }
+    return () => clearInterval(intervalId)
   }, [])
 
   // Update apartment status when sales records change
@@ -122,9 +129,16 @@ export default function BlockPage() {
         date: new Date().toLocaleString('tr-TR'),
       }))
 
-      const updated = [...salesRecords, ...newRecords]
-      setSalesRecords(updated)
-      localStorage.setItem('salesRecords', JSON.stringify(updated))
+      fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecords),
+      })
+        .then(r => r.json())
+        .then(data => {
+          setSalesRecords(Array.isArray(data) ? data : [])
+        })
+        .catch(err => console.error('Sales save error:', err))
 
       // Seçili dairelerin status'unu güncelle
       setApartments(prevApts =>
@@ -142,6 +156,8 @@ export default function BlockPage() {
       setSelectedApartment(null)
       setSelectedApartments(new Set())
       setMultiSelectMode(false)
+
+      fetchSaleDetails()
 
       // Başarı mesajı
       const count = dataArray.length
@@ -161,9 +177,20 @@ export default function BlockPage() {
       const recordToCancel = salesRecords[recordIndex]
 
       // Satış kaydını sil
-      const updated = salesRecords.filter((_, idx) => idx !== recordIndex)
-      setSalesRecords(updated)
-      localStorage.setItem('salesRecords', JSON.stringify(updated))
+      fetch('/api/sales', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apartmentId: recordToCancel.apartmentId }),
+      })
+        .then(r => r.json())
+        .then(data => setSalesRecords(Array.isArray(data) ? data : []))
+        .catch(err => console.error('Sales delete error:', err))
+
+      fetch('/api/sale-details', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apartmentId: recordToCancel.apartmentId }),
+      }).catch(err => console.error('Sale details delete error:', err))
 
       // Dairenin statusunu tekrar 'available' yap
       setApartments(prevApts =>
@@ -208,18 +235,18 @@ export default function BlockPage() {
     })
 
     const totalRevenue = blockSales.reduce((sum, record) => {
-      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + record.apartmentId) || '{}')
+      const saleData = saleDetailsMap[record.apartmentId] || {}
       return sum + (saleData.salePrice || 0)
     }, 0)
 
     const totalDeposit = blockSales.reduce((sum, record) => {
-      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + record.apartmentId) || '{}')
+      const saleData = saleDetailsMap[record.apartmentId] || {}
       const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
       return sum + (saleData.depositAmount || 0) + payments
     }, 0)
 
     const remainingBalance = blockSales.reduce((sum, record) => {
-      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + record.apartmentId) || '{}')
+      const saleData = saleDetailsMap[record.apartmentId] || {}
       return sum + (saleData.remainingBalance || ((saleData.salePrice || 0) - (saleData.depositAmount || 0)))
     }, 0)
 
@@ -235,18 +262,18 @@ export default function BlockPage() {
     const allSales = salesRecords.filter(record => record.saleType === 'sold')
 
     const totalRevenue = allSales.reduce((sum, record) => {
-      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + record.apartmentId) || '{}')
+      const saleData = saleDetailsMap[record.apartmentId] || {}
       return sum + (saleData.salePrice || 0)
     }, 0)
 
     const totalDeposit = allSales.reduce((sum, record) => {
-      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + record.apartmentId) || '{}')
+      const saleData = saleDetailsMap[record.apartmentId] || {}
       const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
       return sum + (saleData.depositAmount || 0) + payments
     }, 0)
 
     const remainingBalance = allSales.reduce((sum, record) => {
-      const saleData = JSON.parse(localStorage.getItem('saleDetails_' + record.apartmentId) || '{}')
+      const saleData = saleDetailsMap[record.apartmentId] || {}
       return sum + (saleData.remainingBalance || ((saleData.salePrice || 0) - (saleData.depositAmount || 0)))
     }, 0)
 
@@ -323,11 +350,8 @@ export default function BlockPage() {
   const handleModalClose = () => {
     setShowSalesModal(false)
     setSelectedApartment(null)
-    // Modal kapatılırken localStorage'ı oku ve güncelle
-    const saved = localStorage.getItem('salesRecords')
-    if (saved) {
-      setSalesRecords(JSON.parse(saved))
-    }
+    fetchSalesRecords()
+    fetchSaleDetails()
   }
 
   const filteredApartments = filterFloor
@@ -407,7 +431,9 @@ export default function BlockPage() {
           {multiSelectMode && selectedApartments.size > 0 && (
             <button
               onClick={() => {
-                // Modal açmadan önce seçili daireleri hazırla
+                const firstSelectedId = Array.from(selectedApartments)[0]
+                const firstSelected = apartments.find(a => a.id === firstSelectedId) || null
+                setSelectedApartment(firstSelected)
                 setShowSalesModal(true)
               }}
               className="ml-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-all shadow-lg animate-pulse"

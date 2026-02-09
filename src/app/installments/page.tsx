@@ -18,6 +18,7 @@ export default function InstallmentsPage() {
   const router = useRouter()
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
+  const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [payAmount, setPayAmount] = useState('')
@@ -30,42 +31,49 @@ export default function InstallmentsPage() {
   const [selectedAptForManage, setSelectedAptForManage] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/apartments')
-      .then(r => r.json())
-      .then(data => setApartments(data))
-      .finally(() => setLoading(false))
+    const loadData = async () => {
+      try {
+        const [aptRes, salesRes, detailsRes] = await Promise.all([
+          fetch('/api/apartments'),
+          fetch('/api/sales'),
+          fetch('/api/sale-details'),
+        ])
 
-    const saved = localStorage.getItem('salesRecords')
-    if (saved) setSalesRecords(JSON.parse(saved))
+        const [aptData, salesData, detailsData] = await Promise.all([
+          aptRes.json(),
+          salesRes.json(),
+          detailsRes.json(),
+        ])
+
+        setApartments(Array.isArray(aptData) ? aptData : [])
+        setSalesRecords(Array.isArray(salesData) ? salesData : [])
+        setSaleDetailsMap(detailsData || {})
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
   }, [refreshKey])
 
-  // Listen for localStorage changes and tab focus for real-time updates
   useEffect(() => {
-    const handleStorageChange = () => {
-      const saved = localStorage.getItem('salesRecords')
-      if (saved) setSalesRecords(JSON.parse(saved))
-    }
+    const intervalId = setInterval(() => {
+      fetch('/api/sales')
+        .then(r => r.json())
+        .then(data => setSalesRecords(Array.isArray(data) ? data : []))
+        .catch(() => undefined)
 
-    const handleFocus = () => {
-      setRefreshKey(k => k + 1)
-    }
+      fetch('/api/sale-details')
+        .then(r => r.json())
+        .then(data => setSaleDetailsMap(data || {}))
+        .catch(() => undefined)
+    }, 3000)
 
-    window.addEventListener('storage', handleStorageChange)
-    window.addEventListener('focus', handleFocus)
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('focus', handleFocus)
-    }
+    return () => clearInterval(intervalId)
   }, [])
 
   const getSaleDetails = (apartmentId: string) => {
-    const raw = localStorage.getItem('saleDetails_' + apartmentId)
-    if (!raw) return null
-    try {
-      return JSON.parse(raw)
-    } catch {
-      return null
-    }
+    return saleDetailsMap[apartmentId] || null
   }
   // Apply payment to sale details
   const applyPayment = (apartmentId: string, amt: number) => {
@@ -76,7 +84,13 @@ export default function InstallmentsPage() {
     details.payments.push(payment)
     details.remainingBalance = (details.remainingBalance || (details.salePrice - (details.depositAmount || 0))) - amt
     if (details.remainingBalance < 0) details.remainingBalance = 0
-    localStorage.setItem('saleDetails_' + apartmentId, JSON.stringify(details))
+    const updated = { ...saleDetailsMap, [apartmentId]: details }
+    setSaleDetailsMap(updated)
+    fetch('/api/sale-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    }).catch(err => console.error('Sale details save error:', err))
     setPayAmount('')
     setSelectedApt(null)
     setRefreshKey(k => k + 1)
@@ -139,7 +153,12 @@ export default function InstallmentsPage() {
     details.installmentMonths = data.installmentMonths
     details.paymentMethod = data.paymentMethod
 
-    localStorage.setItem(`saleDetails_${selectedAptForManage}`, JSON.stringify(details))
+    setSaleDetailsMap(prev => ({ ...prev, [selectedAptForManage]: details }))
+    fetch('/api/sale-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    }).catch(err => console.error('Sale details save error:', err))
     setRefreshKey(k => k + 1)
     setSelectedAptForManage(null)
   }

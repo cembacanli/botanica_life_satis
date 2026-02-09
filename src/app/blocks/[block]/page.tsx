@@ -110,14 +110,15 @@ export default function BlockPage() {
   }, [salesRecords])
 
   const handleSalesSubmit = useCallback(
-    (saleData: SaleData) => {
-      const apartmentIds = multiSelectMode ? Array.from(selectedApartments) : [saleData.apartmentId]
+    (saleData: SaleData | SaleData[]) => {
+      // Çoklu seçim kontrolü
+      const dataArray = Array.isArray(saleData) ? saleData : [saleData]
       
-      const newRecords = apartmentIds.map(aptId => ({
-        apartmentId: aptId,
-        saleType: saleData.saleType,
-        customerName: saleData.customerName,
-        customerPhone: saleData.customerPhone,
+      const newRecords = dataArray.map(data => ({
+        apartmentId: data.apartmentId,
+        saleType: data.saleType,
+        customerName: data.customerName,
+        customerPhone: data.customerPhone,
         date: new Date().toLocaleString('tr-TR'),
       }))
 
@@ -128,10 +129,10 @@ export default function BlockPage() {
       // Seçili dairelerin status'unu güncelle
       setApartments(prevApts =>
         prevApts.map(apt =>
-          apartmentIds.includes(apt.id)
+          dataArray.some(d => d.apartmentId === apt.id)
             ? {
                 ...apt,
-                status: saleData.saleType === 'reservation' ? 'reserved' : saleData.saleType === 'deposit' ? 'deposited' : 'sold',
+                status: dataArray[0].saleType === 'reservation' ? 'reserved' : dataArray[0].saleType === 'deposit' ? 'deposited' : 'sold',
               }
             : apt
         )
@@ -143,9 +144,10 @@ export default function BlockPage() {
       setMultiSelectMode(false)
 
       // Başarı mesajı
-      const count = apartmentIds.length
+      const count = dataArray.length
+      const firstData = dataArray[0]
       alert(
-        `${saleData.customerName} için ${count} ${count > 1 ? 'daire' : 'dairenin'} ${saleData.saleType === 'reservation' ? 'Rezervasyonu' : saleData.saleType === 'deposit' ? 'Kaporası' : 'Satışı'} başarıyla kaydedildi!`
+        `${firstData.customerName} için ${count} ${count > 1 ? 'daire' : 'dairenin'} ${firstData.saleType === 'reservation' ? 'Rezervasyonu' : firstData.saleType === 'deposit' ? 'Kaporası' : 'Satışı'} başarıyla kaydedildi!`
       )
     },
     [salesRecords, multiSelectMode, selectedApartments]
@@ -413,7 +415,6 @@ export default function BlockPage() {
               ✓ {selectedApartments.size} Daireyi Sat
             </button>
           )}
-          </div>
         </div>
       </div>
 

@@ -72,7 +72,6 @@ export default function SalesModal({
   userRole = 'user',
   selectedApartments,
   apartments = []
-}
 }: SalesModalProps) {
   const [selectedSaleType, setSelectedSaleType] = useState<SaleType>('reservation')
   const [selectedInstallment, setSelectedInstallment] = useState<number>(1)

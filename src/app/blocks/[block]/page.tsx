@@ -24,8 +24,10 @@ export default function BlockPage() {
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null)
+  const [selectedApartments, setSelectedApartments] = useState<Set<string>>(new Set())
   const [showSalesModal, setShowSalesModal] = useState(false)
   const [filterFloor, setFilterFloor] = useState<string>('')
+  const [multiSelectMode, setMultiSelectMode] = useState(false)
 
   useEffect(() => {
     fetchApartments()
@@ -109,22 +111,24 @@ export default function BlockPage() {
 
   const handleSalesSubmit = useCallback(
     (saleData: SaleData) => {
-      const newRecord: SalesRecord = {
-        apartmentId: saleData.apartmentId,
+      const apartmentIds = multiSelectMode ? Array.from(selectedApartments) : [saleData.apartmentId]
+      
+      const newRecords = apartmentIds.map(aptId => ({
+        apartmentId: aptId,
         saleType: saleData.saleType,
         customerName: saleData.customerName,
         customerPhone: saleData.customerPhone,
         date: new Date().toLocaleString('tr-TR'),
-      }
+      }))
 
-      const updated = [...salesRecords, newRecord]
+      const updated = [...salesRecords, ...newRecords]
       setSalesRecords(updated)
       localStorage.setItem('salesRecords', JSON.stringify(updated))
 
-      // Dairenin statusunu güncelle
+      // Seçili dairelerin status'unu güncelle
       setApartments(prevApts =>
         prevApts.map(apt =>
-          apt.id === saleData.apartmentId
+          apartmentIds.includes(apt.id)
             ? {
                 ...apt,
                 status: saleData.saleType === 'reservation' ? 'reserved' : saleData.saleType === 'deposit' ? 'deposited' : 'sold',
@@ -135,13 +139,16 @@ export default function BlockPage() {
 
       setShowSalesModal(false)
       setSelectedApartment(null)
+      setSelectedApartments(new Set())
+      setMultiSelectMode(false)
 
       // Başarı mesajı
+      const count = apartmentIds.length
       alert(
-        `${saleData.customerName} için ${saleData.saleType === 'reservation' ? 'Rezervasyon' : saleData.saleType === 'deposit' ? 'Kapora' : 'Satış'} başarıyla kaydedildi!`
+        `${saleData.customerName} için ${count} ${count > 1 ? 'daire' : 'dairenin'} ${saleData.saleType === 'reservation' ? 'Rezervasyonu' : saleData.saleType === 'deposit' ? 'Kaporası' : 'Satışı'} başarıyla kaydedildi!`
       )
     },
-    [salesRecords]
+    [salesRecords, multiSelectMode, selectedApartments]
   )
 
   const handleCancelSale = useCallback(
@@ -284,7 +291,21 @@ export default function BlockPage() {
   }
 
   const handleApartmentClick = (apt: Apartment) => {
-    // Debug log
+    // Multi-select mode'daysa dairenin seçimini toggle et
+    if (multiSelectMode) {
+      if (apt.status === 'available') {
+        const newSet = new Set(selectedApartments)
+        if (newSet.has(apt.id)) {
+          newSet.delete(apt.id)
+        } else {
+          newSet.add(apt.id)
+        }
+        setSelectedApartments(newSet)
+      }
+      return
+    }
+
+    // Normal ayınız modu
     console.log('Dairecliked:', apt.id, 'Status:', apt.status, 'CurrentUser:', currentUser, 'Role:', currentUser?.role)
     
     // Admin tüm daireleri açabilir, kullanıcılar sadece müsait daireleri
@@ -356,6 +377,42 @@ export default function BlockPage() {
           <div className="text-right">
             <div className="text-3xl font-bold">{blockName}</div>
             <div className="text-white/80">BLOK</div>
+            
+            {/* Multi-select Mode Indicator */}
+            {multiSelectMode && selectedApartments.size > 0 && (
+              <div className="mt-2 bg-white/20 px-3 py-1 rounded-full text-sm">
+                ✓ {selectedApartments.size} daire seçildi
+              </div>
+            )}
+          </div>
+
+          {/* Multi-select Toggle Button */}
+          <button
+            onClick={() => {
+              setMultiSelectMode(!multiSelectMode)
+              setSelectedApartments(new Set())
+            }}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              multiSelectMode
+                ? 'bg-white text-purple-600 shadow-lg'
+                : 'bg-white/20 text-white hover:bg-white/30'
+            }`}
+          >
+            {multiSelectMode ? '✓ Çoklu Seç Aktif' : '☐ Çoklu Seç'}
+          </button>
+
+          {/* Seçili Daireleri Sat Butonu */}
+          {multiSelectMode && selectedApartments.size > 0 && (
+            <button
+              onClick={() => {
+                // Modal açmadan önce seçili daireleri hazırla
+                setShowSalesModal(true)
+              }}
+              className="ml-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-all shadow-lg animate-pulse"
+            >
+              ✓ {selectedApartments.size} Daireyi Sat
+            </button>
+          )}
           </div>
         </div>
       </div>
@@ -883,6 +940,8 @@ export default function BlockPage() {
         onCancel={handleCancelSale}
         existingRecords={selectedApartment ? salesRecords.filter(r => r.apartmentId === selectedApartment.id) : []}
         userRole={currentUser?.role || 'user'}
+        selectedApartments={multiSelectMode ? selectedApartments : undefined}
+        apartments={apartments}
       />
     </div>
   )

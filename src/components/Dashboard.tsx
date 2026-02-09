@@ -292,11 +292,22 @@ export default function Dashboard() {
                 return sum + (saleData.depositAmount || 0) + payments
               }, 0)
 
+              const remainingApts = blocks[key].totalApartments - blockSales.length
+
               return (
                 <div key={key} className="bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
                   <div className="text-sm text-gray-300">Blok {key}</div>
-                  <div className="text-2xl font-bold text-white">{blockSales.length} satıldı</div>
-                  <div className="text-sm text-gray-300 mt-1">Toplam Ciro</div>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-2xl font-bold text-white">{blockSales.length} satıldı</div>
+                      <div className="text-sm text-blue-300 mt-1">{remainingApts} daire kaldı</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-400">Toplam</div>
+                      <div className="text-sm text-gray-300">{blocks[key].totalApartments}</div>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-300 mt-2">Toplam Ciro</div>
                   <div className="text-lg font-semibold text-green-300">
                     {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(totalRevenue)}
                   </div>

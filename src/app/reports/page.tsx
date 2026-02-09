@@ -16,15 +16,40 @@ export default function ReportsPage() {
   const router = useRouter()
   const [reports, setReports] = useState<SalesReport[]>([])
   const [filterType, setFilterType] = useState<string>('all')
+  const [apartments, setApartments] = useState<any[]>([])
 
   useEffect(() => {
-    loadReports()
+    loadData()
   }, [])
 
-  const loadReports = () => {
-    const saved = localStorage.getItem('salesRecords')
-    if (saved) {
-      setReports(JSON.parse(saved))
+  const loadData = async () => {
+    try {
+      // Daireleri yükle
+      const aptResponse = await fetch('/api/apartments')
+      const aptData = await aptResponse.json()
+      setApartments(aptData)
+
+      // Satış kayıtlarını yükle
+      const saved = localStorage.getItem('salesRecords')
+      if (saved) {
+        const salesData = JSON.parse(saved)
+        
+        // Her satış kaydına blok ve daire numarası bilgisi ekle
+        const enrichedReports = salesData.map((record: any) => {
+          const apt = aptData.find((a: any) => a.id === record.apartmentId)
+          return {
+            ...record,
+            block: apt?.block || '?',
+            number: apt?.number || 0,
+          }
+        })
+        
+        setReports(enrichedReports)
+      }
+    } catch (error) {
+      console.error('Veri yükleme hatası:', error)
+      const saved = localStorage.getItem('salesRecords')
+      if (saved) setReports(JSON.parse(saved))
     }
   }
 

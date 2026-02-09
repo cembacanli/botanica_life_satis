@@ -16,10 +16,12 @@ interface SalesModalProps {
   apartment: Apartment | null
   isOpen: boolean
   onClose: () => void
-  onSave: (saleData: SaleData) => void
+  onSave: (saleData: SaleData | SaleData[]) => void
   onCancel?: (recordId: number) => void
   existingRecords?: SalesRecord[]
   userRole?: string // 'admin' ise iptal butonu gösterilir
+  selectedApartments?: Set<string> // Çoklu seçim için
+  apartments?: Apartment[] // Tüm daireler (çoklu seçim yaparken lazım)
 }
 
 export interface SaleData {
@@ -67,7 +69,10 @@ export default function SalesModal({
   onSave,
   onCancel,
   existingRecords = [],
-  userRole = 'user'
+  userRole = 'user',
+  selectedApartments,
+  apartments = []
+}
 }: SalesModalProps) {
   const [selectedSaleType, setSelectedSaleType] = useState<SaleType>('reservation')
   const [selectedInstallment, setSelectedInstallment] = useState<number>(1)
@@ -96,11 +101,24 @@ export default function SalesModal({
     setIsSubmitting(true)
 
     try {
+      // Çoklu seçim kontrolü
+      const aptIds = selectedApartments && selectedApartments.size > 0 
+        ? Array.from(selectedApartments)
+        : apartment 
+        ? [apartment.id]
+        : []
+
+      if (aptIds.length === 0) {
+        alert('Lütfen en az bir daire seçin')
+        return
+      }
+
       // Taksit planı hesapla (Faiz yok, ilk ödeme düşülü)
       let installmentData = { months: 1, payment: 0 }
-      if (selectedSaleType === 'sold' && selectedInstallment >= 1) {
+      const firstApt = apartments.find(a => a.id === aptIds[0]) || apartment
+      if (selectedSaleType === 'sold' && selectedInstallment >= 1 && firstApt) {
         const depositAmount = formData.paymentAmount ? parseInt(formData.paymentAmount) : 0
-        const salePrice = formData.salePrice ? parseInt(formData.salePrice) : apartment.price
+        const salePrice = formData.salePrice ? parseInt(formData.salePrice) : firstApt.price
         const plan = calculateInstallment(
           salePrice,
           depositAmount,
@@ -109,8 +127,9 @@ export default function SalesModal({
         installmentData = { months: selectedInstallment, payment: plan.monthlyPayment }
       }
 
-      const saleData: SaleData = {
-        apartmentId: apartment.id,
+      // Tüm seçili daireler için SaleData oluştur
+      const saleDataArray: SaleData[] = aptIds.map(aptId => ({
+        apartmentId: aptId,
         saleType: selectedSaleType,
         customerName: formData.customerName,
         customerPhone: formData.customerPhone,
@@ -119,47 +138,53 @@ export default function SalesModal({
         installmentMonths: selectedInstallment > 1 ? selectedInstallment : undefined,
         monthlyPayment: installmentData.payment > 0 ? installmentData.payment : undefined,
         notes: formData.notes,
-      }
+      }))
 
-      // Satış detaylarını localStorage'a kaydet (istatistikler için)
-      const salePrice = formData.salePrice ? parseInt(formData.salePrice) : apartment.price
+      // Her daire için detayları kaydet
+      const salePrice = formData.salePrice ? parseInt(formData.salePrice) : (apartment?.price || 0)
+      aptIds.forEach(aptId => {
+        const saleDetails = {
+          apartmentId: aptId,
+          depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
+          salePrice,
+          installmentMonths: selectedInstallment,
+          monthlyPayment: installmentData.payment,
+          payments: [],
+          remainingBalance: salePrice - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0),
+        }
+        localStorage.setItem(`saleDetails_${aptId}`, JSON.stringify(saleDetails))
+      })
 
-      const saleDetails = {
-        apartmentId: apartment.id,
-        depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
-        salePrice,
-        installmentMonths: selectedInstallment,
-        monthlyPayment: installmentData.payment,
-        payments: [], // ekstra ödemeler burada tutulacak
-        remainingBalance: salePrice - (formData.paymentAmount ? parseInt(formData.paymentAmount) : 0),
-      }
-      localStorage.setItem(`saleDetails_${apartment.id}`, JSON.stringify(saleDetails))
-
-      // WhatsApp mesajı gönder
+      // WhatsApp mesajı gönder (sadece birinci daire için)
       try {
-        const salePrice = formData.salePrice ? parseInt(formData.salePrice) : apartment.price
-        const depositAmount = formData.paymentAmount ? parseInt(formData.paymentAmount) : 0
+        const firstApart = apartments.find(a => a.id === aptIds[0]) || apartment
         await fetch('/api/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             customerPhone: formData.customerPhone,
             customerName: formData.customerName,
-            block: apartment.block,
-            apartmentNumber: apartment.number,
+            block: firstApart?.block || '',
+            apartmentNumber: firstApart?.number || '',
             price: salePrice,
-            depositAmount,
+            depositAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : 0,
             saleType: selectedSaleType,
-            monthlyPayment: saleData.monthlyPayment,
-            installmentMonths: saleData.installmentMonths,
+            monthlyPayment: installmentData.payment,
+            installmentMonths: installmentData.months,
           }),
         })
       } catch (err) {
         console.log('WhatsApp mesajı gönderilemedi (opsiyonel):', err)
-        // Devam et, hata olsa da satış kaydedilsin
+        // Devam et
       }
 
-      onSave(saleData)
+      // onSave callback'ini çağır - çoklu veya tek seçim
+      if (saleDataArray.length > 1) {
+        onSave(saleDataArray)
+      } else {
+        onSave(saleDataArray[0])
+      }
+
       setFormData({ customerName: '', customerPhone: '', customerEmail: '', paymentAmount: '', salePrice: '', notes: '' })
       setSelectedInstallment(1)
     } finally {

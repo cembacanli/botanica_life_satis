@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { Apartment } from '@/lib/data-generator'
 import PaymentModal from '@/components/PaymentModal'
+import InstallmentManageModal, { InstallmentManageData } from '@/components/InstallmentManageModal'
 import { useRouter } from 'next/navigation'
 
 interface SalesRecord {
@@ -25,6 +26,8 @@ export default function InstallmentsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [pendingPayment, setPendingPayment] = useState<{ apartmentId: string; amount: number; label: string } | null>(null)
+  const [manageModalOpen, setManageModalOpen] = useState(false)
+  const [selectedAptForManage, setSelectedAptForManage] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/apartments')
@@ -120,12 +123,38 @@ export default function InstallmentsPage() {
     setPendingPayment(null)
   }
 
+  const handleManageInstallment = (apartmentId: string) => {
+    setSelectedAptForManage(apartmentId)
+    setManageModalOpen(true)
+  }
+
+  const handleSaveInstallment = (data: InstallmentManageData) => {
+    if (!selectedAptForManage) return
+
+    const details = getSaleDetails(selectedAptForManage)
+    if (!details) return
+
+    details.startDate = data.startDate
+    details.monthlyPayment = data.monthlyPayment
+    details.installmentMonths = data.installmentMonths
+    details.paymentMethod = data.paymentMethod
+
+    localStorage.setItem(`saleDetails_${selectedAptForManage}`, JSON.stringify(details))
+    setRefreshKey(k => k + 1)
+    setSelectedAptForManage(null)
+  }
+
   if (loading) return <div className="p-8">Yükleniyor...</div>
 
   const soldRecords = salesRecords.filter(r => r.saleType === 'sold')
 
   const filteredSoldRecords = soldRecords.filter(rec => {
     const apt = apartments.find(a => a.id === rec.apartmentId)
+    const details = getSaleDetails(rec.apartmentId)
+    const remainingBalance = details?.remainingBalance || (details?.salePrice || 0) - (details?.depositAmount || 0)
+
+    // Sıfır borç olan daireleri gizle
+    if (remainingBalance <= 0) return false
 
     // Block filter
     if (blockFilter !== 'all' && apt?.block !== blockFilter) return false
@@ -235,12 +264,13 @@ export default function InstallmentsPage() {
               </div>
 
                 {/* Ödeme kaydetme */}
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex gap-2 flex-wrap">
                 <input value={selectedApt === rec.apartmentId ? payAmount : ''} onChange={e => { setSelectedApt(rec.apartmentId); setPayAmount(e.target.value) }} className="px-3 py-2 border rounded w-56" placeholder="Ara ödeme tutarı" />
                 <button onClick={() => { const amt = parseInt(payAmount || '0'); if (!amt || amt <= 0) return alert('Geçerli bir tutar girin'); openPaymentModal(rec.apartmentId, amt, 'Ara Ödeme') }} className="px-4 py-2 bg-blue-600 text-white rounded">Ara Ödeme Kaydet</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); const amt = details.monthlyPayment || Math.round((details.salePrice - (details.depositAmount || 0)) / (details.installmentMonths || 1)); openPaymentModal(rec.apartmentId, amt, 'Aylık Ödeme') }} className="px-4 py-2 bg-green-600 text-white rounded">Aylık Ödeme Al</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); const remaining = details.remainingBalance || (details.salePrice - (details.depositAmount || 0)); if (!remaining || remaining <= 0) return alert('Ödenecek bakiye yok'); openPaymentModal(rec.apartmentId, remaining, 'Tamamını Öde') }} className="px-4 py-2 bg-red-600 text-white rounded">Tamamını Öde</button>
-                <div className="ml-auto text-sm text-gray-500">Son Ödemeler:</div>
+                <button onClick={() => handleManageInstallment(rec.apartmentId)} className="px-4 py-2 bg-purple-600 text-white rounded">⚙️ Taksit Bilgileri</button>
+                <div className="ml-auto text-sm text-gray-400">Son Ödemeler:</div>
               </div>
 
               {details?.payments?.length > 0 && (
@@ -272,6 +302,15 @@ export default function InstallmentsPage() {
             </div>
           )
         })}
-      </div>      </div>    </div>
+      </div>
+
+      {/* Taksit Yönetim Modal */}
+      <InstallmentManageModal
+        isOpen={manageModalOpen}
+        onClose={() => setManageModalOpen(false)}
+        onSave={handleSaveInstallment}
+        currentData={selectedAptForManage ? getSaleDetails(selectedAptForManage) : undefined}
+      />
+      </div>    </div>
   )
 }

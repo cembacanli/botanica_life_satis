@@ -127,15 +127,17 @@ export default function Dashboard() {
 
   if (!mounted || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center" style={{backgroundImage: 'url(/vaziyet.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}>
+        <div className="absolute inset-0 bg-black/60"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 relative z-10"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 md:p-8">
-      <div className="w-full mx-auto px-0 md:max-w-7xl">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 md:p-8" style={{backgroundImage: 'url(/vaziyet.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}>
+      <div className="absolute inset-0 bg-black/60 pointer-events-none"></div>
+      <div className="w-full mx-auto px-0 md:max-w-7xl relative z-10">
         {/* Header */}
         <div className="mb-12 text-center flex items-center justify-between">
           <div className="flex-1">

@@ -12,11 +12,12 @@ export interface SaleDetails {
   salePrice: number
   installmentMonths: number
   monthlyPayment: number
-  payments: Array<{ amount: number; date: string }>
+  payments: Array<{ amount: number; date: string; label?: string }>
   remainingBalance: number
   startDate?: string
   paymentMethod?: string
   customSchedule?: number[]
+  customScheduleDates?: string[]
 }
 
 export async function GET(request: NextRequest) {
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
         startDate: data.start_date,
         paymentMethod: data.payment_method,
         customSchedule: data.custom_schedule,
+        customScheduleDates: data.custom_schedule_dates,
       })
     }
 
@@ -69,6 +71,7 @@ export async function GET(request: NextRequest) {
         startDate: row.start_date,
         paymentMethod: row.payment_method,
         customSchedule: row.custom_schedule,
+        customScheduleDates: row.custom_schedule_dates,
       }
     })
 
@@ -106,6 +109,7 @@ export async function POST(request: NextRequest) {
         start_date: detail.startDate,
         payment_method: detail.paymentMethod,
         custom_schedule: detail.customSchedule,
+        custom_schedule_dates: detail.customScheduleDates,
         updated_at: new Date().toISOString(),
       }
 
@@ -134,6 +138,7 @@ export async function POST(request: NextRequest) {
         startDate: row.start_date,
         paymentMethod: row.payment_method,
         customSchedule: row.custom_schedule,
+        customScheduleDates: row.custom_schedule_dates,
       }
     })
 
@@ -169,6 +174,7 @@ export async function DELETE(request: NextRequest) {
         startDate: row.start_date,
         paymentMethod: row.payment_method,
         customSchedule: row.custom_schedule,
+        customScheduleDates: row.custom_schedule_dates,
       }
     })
 

@@ -12,10 +12,14 @@ export interface SaleDetails {
   salePrice: number
   installmentMonths: number
   monthlyPayment: number
-  payments: Array<{ amount: number; date: string }>
+  payments: Array<{ amount: number; date: string; label?: string }>
   remainingBalance: number
   startDate?: string
   paymentMethod?: string
+  customSchedule?: number[]
+  customScheduleDates?: string[]
+  installmentSchedule?: number[]
+  installmentScheduleDates?: string[]
 }
 
 const salesRecords: SalesRecord[] = []

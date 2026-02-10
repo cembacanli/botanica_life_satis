@@ -16,6 +16,107 @@ interface SalesRecord {
 
 export default function InstallmentsPage() {
   const router = useRouter()
+  const formatDateTr = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}.${month}.${year}`
+  }
+  const formatDateTimeTr = (date: Date) => {
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${formatDateTr(date)} ${hours}:${minutes}:${seconds}`
+  }
+  const parsePaymentDate = (value: string) => {
+    const iso = new Date(value)
+    if (!Number.isNaN(iso.getTime())) return iso
+    // tr-TR format: dd.MM.yyyy HH:mm:ss
+    const match = value.match(/(\d{2})\.(\d{2})\.(\d{4})/) 
+    if (!match) return new Date()
+    const day = parseInt(match[1], 10)
+    const month = parseInt(match[2], 10)
+    const year = parseInt(match[3], 10)
+    return new Date(year, month - 1, day)
+  }
+  const buildScheduleAmounts = (details: any) => {
+    const months = details?.installmentMonths || 0
+    const base = details?.customSchedule || details?.installmentSchedule || []
+    const amounts: number[] = []
+    for (let i = 0; i < months; i++) {
+      const v = base[i]
+      amounts.push(typeof v === 'number' && v > 0 ? v : details?.monthlyPayment || 0)
+    }
+    return amounts
+  }
+  const getInstallmentsPaidCount = (schedule: number[], paidAmount: number) => {
+    let total = 0
+    let count = 0
+    for (let i = 0; i < schedule.length; i++) {
+      total += schedule[i]
+      if (paidAmount >= total) {
+        count += 1
+      } else {
+        break
+      }
+    }
+    return count
+  }
+  const buildAdjustedSchedule = (details: any, schedule: number[], paidAmount: number) => {
+    const months = details?.installmentMonths || 0
+    if (months === 0) return []
+    const paidCount = getInstallmentsPaidCount(schedule, paidAmount)
+    const remainingMonths = Math.max(0, months - paidCount)
+    if (remainingMonths === 0) return schedule
+
+    // ⭐ Custom schedule varsa ASLA yeniden hesaplama yapma!
+    // Kullanıcı manual olarak taksit tutarlarını ayarladıysa, bunları koru
+    const hasCustomSchedule = details?.customSchedule && details.customSchedule.length > 0
+    if (hasCustomSchedule) {
+      return [...schedule]
+    }
+
+    // Yalnızca otomatik schedule için (custom olmayan) yeniden hesapla
+    const remainingBalance = details?.remainingBalance || 0
+    const adjusted = [...schedule]
+    const perMonth = Math.ceil(remainingBalance / remainingMonths)
+
+    for (let i = paidCount; i < months; i++) {
+      adjusted[i] = perMonth
+    }
+
+    const lastIndex = months - 1
+    if (remainingMonths > 1) {
+      adjusted[lastIndex] = Math.max(0, remainingBalance - perMonth * (remainingMonths - 1))
+    } else {
+      adjusted[lastIndex] = Math.max(0, remainingBalance)
+    }
+    return adjusted
+  }
+  const getInstallmentPaymentIndexMap = (schedule: number[], payments: Array<{ amount: number; label?: string }>) => {
+    const map: Array<number | null> = Array(schedule.length).fill(null)
+    let payIdx = 0
+    let acc = 0
+
+    for (let i = 0; i < schedule.length; i++) {
+      const due = schedule[i]
+      while (payIdx < payments.length && acc < due) {
+        const p = payments[payIdx]
+        if (p.label !== 'Ara Ödeme') {
+          acc += p.amount || 0
+        }
+        payIdx += 1
+      }
+      if (acc >= due) {
+        map[i] = payIdx - 1
+        acc = acc - due
+      } else {
+        map[i] = null
+      }
+    }
+
+    return map
+  }
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
   const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
@@ -34,6 +135,29 @@ export default function InstallmentsPage() {
   const [installmentSelectOpen, setInstallmentSelectOpen] = useState(false)
   const [selectedAptForInstallment, setSelectedAptForInstallment] = useState<string | null>(null)
 
+  const mergeSaleDetails = (prev: Record<string, any>, incoming: Record<string, any>) => {
+    const merged: Record<string, any> = { ...incoming }
+    Object.keys(prev || {}).forEach(key => {
+      if (!merged[key]) {
+        merged[key] = prev[key]
+        return
+      }
+      if ((!merged[key].customScheduleDates || merged[key].customScheduleDates.length === 0) && prev[key].customScheduleDates && prev[key].customScheduleDates.length > 0) {
+        merged[key].customScheduleDates = prev[key].customScheduleDates
+      }
+      if (!merged[key].customSchedule && prev[key].customSchedule) {
+        merged[key].customSchedule = prev[key].customSchedule
+      }
+      if ((!merged[key].customScheduleDates || merged[key].customScheduleDates.length === 0) && prev[key].customScheduleDates && prev[key].customScheduleDates.length > 0) {
+        merged[key].customScheduleDates = prev[key].customScheduleDates
+      }
+      if (!merged[key].installmentSchedule && prev[key].installmentSchedule) {
+        merged[key].installmentSchedule = prev[key].installmentSchedule
+      }
+    })
+    return merged
+  }
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -51,7 +175,7 @@ export default function InstallmentsPage() {
 
         setApartments(Array.isArray(aptData) ? aptData : [])
         setSalesRecords(Array.isArray(salesData) ? salesData : [])
-        setSaleDetailsMap(detailsData || {})
+        setSaleDetailsMap(prev => mergeSaleDetails(prev, detailsData || {}))
       } finally {
         setLoading(false)
       }
@@ -69,7 +193,7 @@ export default function InstallmentsPage() {
 
       fetch('/api/sale-details')
         .then(r => r.json())
-        .then(data => setSaleDetailsMap(data || {}))
+        .then(data => setSaleDetailsMap(prev => mergeSaleDetails(prev, data || {})))
         .catch(() => undefined)
     }, 3000)
 
@@ -80,14 +204,52 @@ export default function InstallmentsPage() {
     return saleDetailsMap[apartmentId] || null
   }
   // Apply payment to sale details
-  const applyPayment = (apartmentId: string, amt: number) => {
+  const applyPayment = (apartmentId: string, amt: number, label: string) => {
     const details = getSaleDetails(apartmentId)
     if (!details) return alert('Satış detayı bulunamadı')
-    const payment = { amount: amt, date: new Date().toLocaleString('tr-TR') }
+    
+    // ⭐ Kontrol: Yeni toplam ödeme ≤ Daire Bedeli
+    const depositAmount = details.depositAmount || 0
+    const salePrice = details.salePrice || 0
+    const currentTotalPayments = (details.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+    const newTotalPayment = depositAmount + currentTotalPayments + amt
+    
+    if (newTotalPayment > salePrice) {
+      return alert(`Hata: Toplam ödeme (₺${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(newTotalPayment)}) daire bedelini (₺${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(salePrice)}) aşamaz!`)
+    }
+    
+    const payment = { amount: amt, date: new Date().toISOString(), label }
     details.payments = details.payments || []
     details.payments.push(payment)
-    details.remainingBalance = (details.remainingBalance || (details.salePrice - (details.depositAmount || 0))) - amt
-    if (details.remainingBalance < 0) details.remainingBalance = 0
+    
+    const oldBalance = details.remainingBalance || (details.salePrice - (details.depositAmount || 0))
+    details.remainingBalance = Math.max(0, oldBalance - amt)
+    
+    // ⭐ SADECE "Ara Ödeme" için custom schedule'ı eşit olarak azalt!
+    if (label === 'Ara Ödeme' && details.customSchedule && details.customSchedule.length > 0 && amt > 0) {
+      const schedule = details.customSchedule
+      const paidAmountInstallments = (details.payments || [])
+        .filter((p: any) => p.label !== 'Ara Ödeme')
+        .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+      const paidCount = getInstallmentsPaidCount(schedule, paidAmountInstallments)
+      const unpaidCount = Math.max(0, schedule.length - paidCount)
+      
+      if (unpaidCount > 0) {
+        // Ara ödemeyi sadece ödenmemiş taksitlere dağıt
+        const amountPerInstallment = amt / unpaidCount
+        const newSchedule = [...schedule]
+        
+        for (let i = paidCount; i < schedule.length; i++) {
+          newSchedule[i] = Math.max(0, schedule[i] - amountPerInstallment)
+        }
+        
+        details.customSchedule = newSchedule
+        if (details.installmentSchedule) {
+          details.installmentSchedule = newSchedule
+        }
+      }
+    }
+    
     const updated = { ...saleDetailsMap, [apartmentId]: details }
     setSaleDetailsMap(updated)
     fetch('/api/sale-details', {
@@ -100,6 +262,52 @@ export default function InstallmentsPage() {
     setRefreshKey(k => k + 1)
   }
 
+  const cancelPayment = (apartmentId: string, paymentIndex: number) => {
+    const details = getSaleDetails(apartmentId)
+    if (!details || !details.payments) return
+    
+    const cancelledPayment = details.payments[paymentIndex]
+    const updatedPayments = details.payments.filter((_: any, i: number) => i !== paymentIndex)
+    const totalPaid = updatedPayments.reduce((s: number, p: any) => s + (p.amount || 0), 0)
+    const totalDebt = (details.salePrice || 0) - (details.depositAmount || 0)
+    details.payments = updatedPayments
+    details.remainingBalance = Math.max(0, totalDebt - totalPaid)
+
+    // ⭐ Ara ödeme iptal edilirse, custom schedule'ı eşit olarak restore et
+    if (cancelledPayment?.label === 'Ara Ödeme' && details.customSchedule && details.customSchedule.length > 0) {
+      const schedule = details.customSchedule
+      const paidAmountInstallments = (updatedPayments || [])
+        .filter((p: any) => p.label !== 'Ara Ödeme')
+        .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+      const paidCount = getInstallmentsPaidCount(schedule, paidAmountInstallments)
+      const unpaidCount = Math.max(0, schedule.length - paidCount)
+      
+      if (unpaidCount > 0 && cancelledPayment?.amount) {
+        // İptal edilen tutarı sadece ödenmemiş taksitlere geri ekle
+        const amountPerInstallment = (cancelledPayment.amount || 0) / unpaidCount
+        const newSchedule = [...schedule]
+        
+        for (let i = paidCount; i < schedule.length; i++) {
+          newSchedule[i] = newSchedule[i] + amountPerInstallment
+        }
+        
+        details.customSchedule = newSchedule
+        if (details.installmentSchedule) {
+          details.installmentSchedule = newSchedule
+        }
+      }
+    }
+
+    const updated = { ...saleDetailsMap, [apartmentId]: details }
+    setSaleDetailsMap(updated)
+    fetch('/api/sale-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    }).catch(err => console.error('Sale details save error:', err))
+    setRefreshKey(k => k + 1)
+  }
+
   const openPaymentModal = (apartmentId: string, amount: number, label: string) => {
     setPendingPayment({ apartmentId, amount, label })
     setPaymentModalOpen(true)
@@ -107,7 +315,7 @@ export default function InstallmentsPage() {
 
   const confirmPayment = (amount: number, print: boolean) => {
     if (!pendingPayment) return
-    applyPayment(pendingPayment.apartmentId, amount)
+    applyPayment(pendingPayment.apartmentId, amount, pendingPayment.label)
     setPaymentModalOpen(false)
 
     if (print) {
@@ -152,14 +360,43 @@ export default function InstallmentsPage() {
     const details = getSaleDetails(selectedAptForManage)
     if (!details) return
 
+    // ⭐ Yeni peşinat varsa kullan, yoksa mevcut peşinatı koru
+    const newDepositAmount = data.depositAmount !== undefined ? data.depositAmount : (details.depositAmount || 0)
+    const salePrice = details.salePrice || 0
+    const schedule = data.installmentSchedule || []
+    const scheduleTotalAmount = schedule.reduce((sum, amt) => sum + amt, 0)
+    const totalPayment = newDepositAmount + scheduleTotalAmount
+    
+    if (totalPayment > salePrice) {
+      alert(`Hata: Toplam ödeme (${new Intl.NumberFormat('tr-TR', {
+        style: 'currency',
+        currency: 'TRY',
+        minimumFractionDigits: 0
+      }).format(totalPayment)}) daire bedelini (${new Intl.NumberFormat('tr-TR', {
+        style: 'currency',
+        currency: 'TRY',
+        minimumFractionDigits: 0
+      }).format(salePrice)}) aşamaz!`)
+      return
+    }
+
     details.startDate = data.startDate
     details.monthlyPayment = data.monthlyPayment
     details.installmentMonths = data.installmentMonths
     details.paymentMethod = data.paymentMethod
     
-    // Taksit çizelgesini kaydet
+    // Peşinat güncelle ve kalan borç hesapla
+    details.depositAmount = newDepositAmount
+    const totalPaid = (details.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+    details.remainingBalance = Math.max(0, salePrice - newDepositAmount - totalPaid)
+    
+    // Taksit çizelgesini kaydet (API customSchedule kullanir)
     if (data.installmentSchedule && data.installmentSchedule.length > 0) {
+      details.customSchedule = data.installmentSchedule
       details.installmentSchedule = data.installmentSchedule
+    }
+    if (data.installmentScheduleDates && data.installmentScheduleDates.length > 0) {
+      details.customScheduleDates = data.installmentScheduleDates
     }
 
     setSaleDetailsMap(prev => ({ ...prev, [selectedAptForManage]: details }))
@@ -304,7 +541,10 @@ export default function InstallmentsPage() {
               {details?.payments?.length > 0 && (
                 <div className="mt-3">
                   {details.payments.map((p: any, i: number) => (
-                    <div key={i} className="text-sm text-gray-700">{p.date} - {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(p.amount)}</div>
+                    <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                      <span>{formatDateTimeTr(parsePaymentDate(p.date))} - {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(p.amount)}</span>
+                      {p.label && <span className="text-xs text-gray-500">({p.label})</span>}
+                    </div>
                   ))}
                 </div>
               )}
@@ -314,59 +554,124 @@ export default function InstallmentsPage() {
                 <div className="mt-4">
                   <div className="text-sm text-gray-600 mb-2">Taksit Çizelgesi</div>
                   <div className="flex gap-2 flex-wrap">
-                    {Array.from({ length: details.installmentMonths }).map((_, mIdx) => {
-                      // Schedule varsa onu kullan, yoksa monthlyPayment kullan
-                      const installmentAmount = details.installmentSchedule 
-                        ? (details.installmentSchedule[mIdx] || 0)
-                        : details.monthlyPayment
-                      
-                      // Taksit tarihini hesapla
+                    {(() => {
+                      const schedule = details.customSchedule || details.installmentSchedule
+                      const scheduleDates = details.customScheduleDates
                       const startDate = details.startDate ? new Date(details.startDate) : new Date()
-                      const installmentDate = new Date(startDate)
-                      installmentDate.setMonth(installmentDate.getMonth() + mIdx)
-                      
-                      // Gecikme kontrolü
-                      const today = new Date()
-                      today.setHours(0, 0, 0, 0)
-                      installmentDate.setHours(0, 0, 0, 0)
-                      const isDelayed = installmentDate < today
-                      
-                      const paidFromPayments = (details.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
-                      const installmentsPaid = Math.floor(paidFromPayments / details.monthlyPayment)
-                      const isPaid = mIdx < installmentsPaid
-                      
-                      return (
-                        <div key={mIdx} className="text-center">
-                          <div className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[110px] border ${
-                            isPaid 
-                              ? 'bg-green-100 text-green-800 border-green-300' 
-                              : isDelayed
-                              ? 'bg-red-100 text-red-800 border-red-300'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
-                          }`}>
-                            <div className="text-xs opacity-80 font-semibold">
-                              {installmentDate.toLocaleDateString('tr-TR', {
-                                month: 'short',
-                                day: 'numeric',
-                              })}
+
+                      const paidFromInstallments = (details.payments || [])
+                        .filter((p: any) => p.label !== 'Ara Ödeme')
+                        .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+                      const scheduleAmounts = buildScheduleAmounts(details)
+                      const adjustedSchedule = buildAdjustedSchedule(details, scheduleAmounts, paidFromInstallments)
+                      const installmentsPaid = getInstallmentsPaidCount(scheduleAmounts, paidFromInstallments)
+                      const installmentPaymentMap = getInstallmentPaymentIndexMap(scheduleAmounts, details.payments || [])
+
+                      const installments = Array.from({ length: details.installmentMonths }).map((_, mIdx) => {
+                        const installmentAmount = schedule ? (schedule[mIdx] || 0) : details.monthlyPayment
+                        const dateValue = scheduleDates?.[mIdx]
+                        const installmentDate = dateValue ? new Date(dateValue) : new Date(startDate)
+                        if (!dateValue) {
+                          installmentDate.setMonth(installmentDate.getMonth() + mIdx)
+                        }
+                        const today = new Date()
+                        today.setHours(0, 0, 0, 0)
+                        installmentDate.setHours(0, 0, 0, 0)
+                        const isDelayed = installmentDate < today
+                        const isPaid = mIdx < installmentsPaid
+
+                        return {
+                          key: `inst-${mIdx}`,
+                          type: 'installment' as const,
+                          date: installmentDate,
+                          amount: adjustedSchedule[mIdx] ?? installmentAmount,
+                          isPaid,
+                          isDelayed,
+                          cancelIndex: installmentPaymentMap[mIdx],
+                        }
+                      })
+
+                      const extras = (details.payments || [])
+                        .filter((p: any) => p.label === 'Ara Ödeme')
+                        .map((p: any, idx: number) => ({
+                          key: `extra-${idx}`,
+                          type: 'extra' as const,
+                          date: parsePaymentDate(p.date),
+                          amount: p.amount || 0,
+                          cancelIndex: details.payments.indexOf(p),
+                        }))
+
+                      const allItems = [...installments, ...extras].sort((a, b) => a.date.getTime() - b.date.getTime())
+
+                      return allItems.map(item => {
+                        if (item.type === 'extra') {
+                          return (
+                            <div key={item.key} className="text-center">
+                              <div className="px-3 py-2 rounded-lg text-sm font-medium min-w-[110px] border bg-yellow-50 text-yellow-800 border-yellow-300">
+                                <div className="text-xs opacity-80 font-semibold">
+                                  {formatDateTr(item.date)}
+                                </div>
+                                <div className="font-bold text-sm">
+                                  {new Intl.NumberFormat('tr-TR', {
+                                    style: 'currency',
+                                    currency: 'TRY',
+                                    minimumFractionDigits: 0,
+                                  }).format(item.amount)}
+                                </div>
+                                <div className="text-xs mt-1">Ara ödeme yapıldı</div>
+                                <button
+                                  onClick={() => cancelPayment(rec.apartmentId, item.cancelIndex as number)}
+                                  className="mt-1 px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                >
+                                  İptal
+                                </button>
+                              </div>
                             </div>
-                            <div className="font-bold text-sm">
-                              {new Intl.NumberFormat('tr-TR', {
-                                style: 'currency',
-                                currency: 'TRY',
-                                minimumFractionDigits: 0,
-                              }).format(installmentAmount)}
+                          )
+                        }
+
+                        return (
+                          <div key={item.key} className="text-center">
+                            <div className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[110px] border ${
+                              item.isPaid
+                                ? 'bg-green-100 text-green-800 border-green-300'
+                                : item.isDelayed
+                                ? 'bg-red-100 text-red-800 border-red-300'
+                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                              <div className="text-xs opacity-80 font-semibold">
+                                {formatDateTr(item.date)}
+                              </div>
+                              <div className="font-bold text-sm">
+                                {new Intl.NumberFormat('tr-TR', {
+                                  style: 'currency',
+                                  currency: 'TRY',
+                                  minimumFractionDigits: 0,
+                                }).format(item.amount)}
+                              </div>
+                              {item.isPaid && (
+                                <div className="text-xs mt-1">
+                                  ✓ Ödendi
+                                  {item.cancelIndex !== null && (
+                                    <button
+                                      onClick={() => cancelPayment(rec.apartmentId, item.cancelIndex as number)}
+                                      className="ml-2 px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                    >
+                                      İptal
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            {isPaid && <div className="text-xs mt-1">✓ Ödendi</div>}
+                            {item.isDelayed && !item.isPaid && (
+                              <div className="text-xs text-red-600 font-bold mt-1 text-center">
+                                ⚠️ Gecikme Var
+                              </div>
+                            )}
                           </div>
-                          {isDelayed && !isPaid && (
-                            <div className="text-xs text-red-600 font-bold mt-1 text-center">
-                              ⚠️ Gecikme Var
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                        )
+                      })
+                    })()}
                   </div>
                 </div>
               )}
@@ -380,6 +685,8 @@ export default function InstallmentsPage() {
         const saleDetails = getSaleDetails(selectedAptForManage)
         const enrichedData = saleDetails ? {
           ...saleDetails,
+          installmentSchedule: saleDetails.customSchedule || saleDetails.installmentSchedule,
+          installmentScheduleDates: saleDetails.customScheduleDates || saleDetails.installmentScheduleDates,
           totalDebt: saleDetails.salePrice || 0, // Toplam Borç = Satış Fiyatı
           paidAmount: (saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0), // İlk Kapora + Tüm Odemeler
           remainingBalance: (saleDetails.salePrice || 0) - ((saleDetails.depositAmount || 0) + (saleDetails.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)) // Kalan = Satis Fiyati - Yapilan Odemeler
@@ -394,20 +701,17 @@ export default function InstallmentsPage() {
           />
         )
       })()}
-      {!selectedAptForManage && (
-        <InstallmentManageModal
-          isOpen={manageModalOpen}
-          onClose={() => setManageModalOpen(false)}
-          onSave={handleSaveInstallment}
-          currentData={undefined}
-        />
-      )}
+
       
       {/* Taksit Seçim Modal */}
       {installmentSelectOpen && selectedAptForInstallment && (() => {
         const details = getSaleDetails(selectedAptForInstallment)
-        const installmentSchedule = (details?.installmentSchedule || []) as number[]
-        const paidAmount = (details?.payments || []).reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)
+        const baseSchedule = buildScheduleAmounts(details)
+        const paidAmountInstallments = (details?.payments || [])
+          .filter((p: any) => p.label !== 'Ara Ödeme')
+          .reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)
+        const installmentSchedule = buildAdjustedSchedule(details, baseSchedule, paidAmountInstallments)
+        const installmentScheduleDates = (details?.customScheduleDates || details?.installmentScheduleDates || []) as string[]
         
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -423,11 +727,15 @@ export default function InstallmentsPage() {
                   // Özel taksit çizelgesi varsa
                   installmentSchedule.map((amount: number, index: number) => {
                     const startDate = details?.startDate ? new Date(details.startDate) : new Date()
-                    const dueDate = new Date(startDate)
-                    dueDate.setMonth(dueDate.getMonth() + index)
+                    const dueDate = installmentScheduleDates[index]
+                      ? new Date(installmentScheduleDates[index])
+                      : new Date(startDate)
+                    if (!installmentScheduleDates[index]) {
+                      dueDate.setMonth(dueDate.getMonth() + index)
+                    }
                     
                     const paymentDate = new Date()
-                    const alreadyPaid = paidAmount >= (installmentSchedule.slice(0, index + 1).reduce((a, b) => a + b, 0))
+                    const alreadyPaid = paidAmountInstallments >= (installmentSchedule.slice(0, index + 1).reduce((a, b) => a + b, 0))
                     
                     return (
                       <button
@@ -453,11 +761,7 @@ export default function InstallmentsPage() {
                               {index + 1}. Taksit
                             </div>
                             <div className="text-sm text-gray-600">
-                              {dueDate.toLocaleDateString('tr-TR', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                              })}
+                              {formatDateTr(dueDate)}
                             </div>
                           </div>
                           <div className="text-right">
@@ -482,7 +786,7 @@ export default function InstallmentsPage() {
                     const dueDate = new Date(startDate)
                     dueDate.setMonth(dueDate.getMonth() + index)
                     
-                    const alreadyPaid = paidAmount >= (monthlyPayment * (index + 1))
+                    const alreadyPaid = paidAmountInstallments >= (monthlyPayment * (index + 1))
                     
                     return (
                       <button
@@ -508,11 +812,7 @@ export default function InstallmentsPage() {
                               {index + 1}. Taksit
                             </div>
                             <div className="text-sm text-gray-600">
-                              {dueDate.toLocaleDateString('tr-TR', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                              })}
+                              {formatDateTr(dueDate)}
                             </div>
                           </div>
                           <div className="text-right">

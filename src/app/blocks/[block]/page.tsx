@@ -1414,6 +1414,14 @@ export default function BlockPage() {
               </div>
 
               <div className="p-6 pt-0 flex justify-end gap-3">
+                <a
+                  href="/protokoller/botanica-life-satis-protokolu.docx"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                >
+                  Satış Protokolünü Aç
+                </a>
                 <button
                   onClick={() => handlePrintContract()}
                   className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium"

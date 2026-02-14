@@ -186,6 +186,7 @@ export default function SalesModal({
 
   const numberOfSelectedApartments = selectedApartments?.size || 0
   const salePriceValue = Number(formData.salePrice || 0)
+  const canSubmitWithExisting = existingRecords.length === 0 || userRole === 'admin'
 
   // When modal opens, initialize salePrice with apartment price (total for multiple) - ONLY on first open
   React.useEffect(() => {
@@ -417,7 +418,9 @@ export default function SalesModal({
                 })}
               </div>
               <p className="text-sm text-amber-800 mt-4 italic">
-                ℹ️ Yeni bir satış yapmak için önce mevcut satış kaydını iptal etmelisiniz.
+                ℹ️ {userRole === 'admin'
+                  ? 'Admin olarak mevcut kaydı güncelleyebilir veya iptal edebilirsiniz.'
+                  : 'Yeni bir satış yapmak için önce mevcut satış kaydını iptal etmelisiniz.'}
               </p>
             </div>
           )}
@@ -830,13 +833,11 @@ export default function SalesModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || existingRecords.length > 0}
+              disabled={isSubmitting || !canSubmitWithExisting}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait disabled:from-gray-400 disabled:to-gray-400 flex items-center justify-center gap-2"
             >
-              {existingRecords.length > 0 ? (
-                <>
-                  🔒 Satış Yapılamaz
-                </>
+              {!canSubmitWithExisting ? (
+                <>🔒 Satış Yapılamaz</>
               ) : isSubmitting ? (
                 <>
                   <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -846,7 +847,7 @@ export default function SalesModal({
                   İşleniyor...
                 </>
               ) : (
-                'Satışı Tamamla'
+                existingRecords.length > 0 ? 'Kaydı Güncelle' : 'Satışı Tamamla'
               )}
             </button>
           </div>

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useEffect, useState } from 'react'
 import { Apartment } from '@/lib/data-generator'
@@ -69,7 +69,7 @@ export default function InstallmentsPage() {
     const remainingMonths = Math.max(0, months - paidCount)
     if (remainingMonths === 0) return schedule
 
-    // ⭐ Custom schedule varsa ASLA yeniden hesaplama yapma!
+    // ? Custom schedule varsa ASLA yeniden hesaplama yapma!
     // Kullanıcı manual olarak taksit tutarlarını ayarladıysa, bunları koru
     const hasCustomSchedule = details?.customSchedule && details.customSchedule.length > 0
     if (hasCustomSchedule) {
@@ -126,6 +126,8 @@ export default function InstallmentsPage() {
   const [selectedApt, setSelectedApt] = useState<string | null>(null)
   const [blockFilter, setBlockFilter] = useState<'all' | 'A' | 'B' | 'C' | 'D'>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'due_soon' | 'ongoing' | 'no_plan'>('all')
+  const [sortBy, setSortBy] = useState<'remaining' | 'next_due' | 'customer'>('remaining')
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [pendingPayment, setPendingPayment] = useState<{ apartmentId: string; amount: number; label: string } | null>(null)
   const [manageModalOpen, setManageModalOpen] = useState(false)
@@ -208,14 +210,14 @@ export default function InstallmentsPage() {
     const details = getSaleDetails(apartmentId)
     if (!details) return alert('Satış detayı bulunamadı')
     
-    // ⭐ Kontrol: Yeni toplam ödeme ≤ Daire Bedeli
+    // ? Kontrol: Yeni toplam ödeme ? Daire Bedeli
     const depositAmount = details.depositAmount || 0
     const salePrice = details.salePrice || 0
     const currentTotalPayments = (details.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
     const newTotalPayment = depositAmount + currentTotalPayments + amt
     
     if (newTotalPayment > salePrice) {
-      return alert(`Hata: Toplam ödeme (₺${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(newTotalPayment)}) daire bedelini (₺${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(salePrice)}) aşamaz!`)
+      return alert(`Hata: Toplam ödeme (?${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(newTotalPayment)}) daire bedelini (?${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(salePrice)}) aşamaz!`)
     }
     
     const payment = { amount: amt, date: new Date().toISOString(), label }
@@ -225,7 +227,7 @@ export default function InstallmentsPage() {
     const oldBalance = details.remainingBalance || (details.salePrice - (details.depositAmount || 0))
     details.remainingBalance = Math.max(0, oldBalance - amt)
     
-    // ⭐ SADECE "Ara Ödeme" için custom schedule'ı eşit olarak azalt!
+    // ? SADECE "Ara Ödeme" için custom schedule'ı eşit olarak azalt!
     if (label === 'Ara Ödeme' && details.customSchedule && details.customSchedule.length > 0 && amt > 0) {
       const schedule = details.customSchedule
       const paidAmountInstallments = (details.payments || [])
@@ -273,7 +275,7 @@ export default function InstallmentsPage() {
     details.payments = updatedPayments
     details.remainingBalance = Math.max(0, totalDebt - totalPaid)
 
-    // ⭐ Ara ödeme iptal edilirse, custom schedule'ı eşit olarak restore et
+    // ? Ara ödeme iptal edilirse, custom schedule'ı eşit olarak restore et
     if (cancelledPayment?.label === 'Ara Ödeme' && details.customSchedule && details.customSchedule.length > 0) {
       const schedule = details.customSchedule
       const paidAmountInstallments = (updatedPayments || [])
@@ -360,7 +362,7 @@ export default function InstallmentsPage() {
     const details = getSaleDetails(selectedAptForManage)
     if (!details) return
 
-    // ⭐ Yeni peşinat varsa kullan, yoksa mevcut peşinatı koru
+    // ? Yeni peşinat varsa kullan, yoksa mevcut peşinatı koru
     const newDepositAmount = data.depositAmount !== undefined ? data.depositAmount : (details.depositAmount || 0)
     const salePrice = details.salePrice || 0
     const schedule = data.installmentSchedule || []
@@ -413,26 +415,82 @@ export default function InstallmentsPage() {
 
   const soldRecords = salesRecords.filter(r => r.saleType === 'sold')
 
-  const filteredSoldRecords = soldRecords.filter(rec => {
-    const apt = apartments.find(a => a.id === rec.apartmentId)
-    const details = getSaleDetails(rec.apartmentId)
-    const remainingBalance = details?.remainingBalance || (details?.salePrice || 0) - (details?.depositAmount || 0)
+  const accountRows = soldRecords
+    .map(rec => {
+      const apt = apartments.find(a => a.id === rec.apartmentId)
+      const details = getSaleDetails(rec.apartmentId)
+      const remainingBalance = details?.remainingBalance || (details?.salePrice || 0) - (details?.depositAmount || 0)
+      const paidFromPayments = (details?.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+      const totalPaid = (details?.depositAmount || 0) + paidFromPayments
 
-    // Sıfır borç olan daireleri gizle
-    if (remainingBalance <= 0) return false
+      const scheduleAmounts = buildScheduleAmounts(details)
+      const paidFromInstallments = (details?.payments || [])
+        .filter((p: any) => p.label !== 'Ara Ödeme' && p.label !== 'Ara Odeme')
+        .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+      const installmentsPaid = getInstallmentsPaidCount(scheduleAmounts, paidFromInstallments)
+      const scheduleDates = details?.customScheduleDates || details?.installmentScheduleDates || []
+      const startDate = details?.startDate ? new Date(details.startDate) : new Date()
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
 
-    // Block filter
-    if (blockFilter !== 'all' && apt?.block !== blockFilter) return false
+      let dueStatus: 'overdue' | 'due_soon' | 'ongoing' | 'no_plan' = 'no_plan'
+      let nextDueDate: Date | null = null
+      let overdueAmount = 0
 
-    // Search filter: match apartment number or customer name or phone
-    if (searchTerm.trim() === '') return true
-    const term = searchTerm.trim().toLowerCase()
-    const aptNumber = apt?.number?.toString() || ''
-    if (aptNumber.includes(term)) return true
-    if (rec.customerName.toLowerCase().includes(term)) return true
-    if (rec.customerPhone.toLowerCase().includes(term)) return true
-    return false
-  })
+      if (details?.installmentMonths && details.installmentMonths > 0) {
+        for (let i = 0; i < details.installmentMonths; i++) {
+          const dateValue = scheduleDates[i]
+          const dueDate = dateValue ? new Date(dateValue) : new Date(startDate)
+          if (!dateValue) dueDate.setMonth(dueDate.getMonth() + i)
+          dueDate.setHours(0, 0, 0, 0)
+
+          if (i >= installmentsPaid) {
+            if (!nextDueDate) nextDueDate = dueDate
+            if (dueDate < today) overdueAmount += scheduleAmounts[i] || details.monthlyPayment || 0
+          }
+        }
+
+        if (nextDueDate) {
+          const dayDiff = Math.ceil((nextDueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+          if (dayDiff < 0) dueStatus = 'overdue'
+          else if (dayDiff <= 7) dueStatus = 'due_soon'
+          else dueStatus = 'ongoing'
+        }
+      }
+
+      return { rec, apt, details, remainingBalance, paidFromPayments, totalPaid, dueStatus, nextDueDate, overdueAmount }
+    })
+    .filter(row => row.remainingBalance > 0)
+
+  const filteredSoldRecords = accountRows
+    .filter(row => {
+      if (blockFilter !== 'all' && row.apt?.block !== blockFilter) return false
+      if (statusFilter !== 'all' && row.dueStatus !== statusFilter) return false
+      if (searchTerm.trim() === '') return true
+
+      const term = searchTerm.trim().toLowerCase()
+      const aptNumber = row.apt?.number?.toString() || ''
+      if (aptNumber.includes(term)) return true
+      if (row.rec.customerName.toLowerCase().includes(term)) return true
+      if (row.rec.customerPhone.toLowerCase().includes(term)) return true
+      return false
+    })
+    .sort((a, b) => {
+      if (sortBy === 'customer') return a.rec.customerName.localeCompare(b.rec.customerName, 'tr')
+      if (sortBy === 'next_due') {
+        const aTime = a.nextDueDate ? a.nextDueDate.getTime() : Number.MAX_SAFE_INTEGER
+        const bTime = b.nextDueDate ? b.nextDueDate.getTime() : Number.MAX_SAFE_INTEGER
+        return aTime - bTime
+      }
+      return b.remainingBalance - a.remainingBalance
+    })
+
+  const summary = {
+    totalOutstanding: filteredSoldRecords.reduce((sum, row) => sum + row.remainingBalance, 0),
+    totalOverdue: filteredSoldRecords.reduce((sum, row) => sum + row.overdueAmount, 0),
+    totalCollected: filteredSoldRecords.reduce((sum, row) => sum + row.totalPaid, 0),
+    overdueCount: filteredSoldRecords.filter(row => row.dueStatus === 'overdue').length,
+  }
 
   return (
     <div className="min-h-screen p-8 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -455,7 +513,26 @@ export default function InstallmentsPage() {
           </button>
         </div>
       <div className="grid grid-cols-1 gap-6">
-        <div className="flex gap-3 items-center mb-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="bg-white rounded-xl p-4 border border-white/10">
+            <div className="text-xs text-gray-500">Toplam Kalan Bakiye</div>
+            <div className="text-xl font-bold text-red-600 mt-1">{new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(summary.totalOutstanding)}</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-white/10">
+            <div className="text-xs text-gray-500">Vadesi Geçen</div>
+            <div className="text-xl font-bold text-orange-600 mt-1">{new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(summary.totalOverdue)}</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-white/10">
+            <div className="text-xs text-gray-500">Tahsil Edilen</div>
+            <div className="text-xl font-bold text-green-600 mt-1">{new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(summary.totalCollected)}</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-white/10">
+            <div className="text-xs text-gray-500">Gecikmeli Dosya</div>
+            <div className="text-xl font-bold text-gray-800 mt-1">{summary.overdueCount}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-4 flex gap-3 items-center mb-2 flex-wrap">
           <label className="text-sm text-gray-600">Blok:</label>
           <select value={blockFilter} onChange={e => setBlockFilter(e.target.value as any)} className="px-3 py-2 border rounded">
             <option value="all">Tüm Bloklar</option>
@@ -465,24 +542,41 @@ export default function InstallmentsPage() {
             <option value="D">D</option>
           </select>
 
+          <label className="text-sm text-gray-600">Durum:</label>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="px-3 py-2 border rounded">
+            <option value="all">Tümü</option>
+            <option value="overdue">Gecikmiş</option>
+            <option value="due_soon">Yaklaşan</option>
+            <option value="ongoing">Planlı</option>
+            <option value="no_plan">Plansız</option>
+          </select>
+
+          <label className="text-sm text-gray-600">Sırala:</label>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="px-3 py-2 border rounded">
+            <option value="remaining">Kalan Bakiye</option>
+            <option value="next_due">Sonraki Vade</option>
+            <option value="customer">Müşteri</option>
+          </select>
+
           <input
             placeholder="Ara: daire no, müşteri veya telefon"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="ml-4 px-3 py-2 border rounded flex-1"
+            className="ml-4 px-3 py-2 border rounded flex-1 min-w-72"
           />
 
           <button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-2 bg-gray-100 rounded">Yenile</button>
         </div>
         {filteredSoldRecords.length === 0 && (
-          <div className="p-4 bg-yellow-50 rounded">Henüz satılan daire yok.</div>
+          <div className="p-4 bg-yellow-50 rounded">Filtreye uygun aktif taksit kaydı bulunamadı.</div>
         )}
 
-        {filteredSoldRecords.map((rec, idx) => {
-          const apt = apartments.find(a => a.id === rec.apartmentId)
-          const details = getSaleDetails(rec.apartmentId)
-          const paidFromPayments = (details?.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
-          const totalPaid = (details?.depositAmount || 0) + paidFromPayments
+        {filteredSoldRecords.map((row, idx) => {
+          const rec = row.rec
+          const apt = row.apt
+          const details = row.details
+          const paidFromPayments = row.paidFromPayments
+          const totalPaid = row.totalPaid
 
           return (
             <div key={idx} className="p-4 bg-white rounded shadow">
@@ -506,6 +600,17 @@ export default function InstallmentsPage() {
                 <div className="text-right">
                   <div className="text-sm text-gray-600">Satış Fiyatı</div>
                   <div className="font-bold text-green-600">{details ? new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(details.salePrice) : '-'}</div>
+                  <div className={`mt-2 inline-flex px-2 py-1 text-xs rounded-full ${
+                    row.dueStatus === 'overdue'
+                      ? 'bg-red-100 text-red-700'
+                      : row.dueStatus === 'due_soon'
+                      ? 'bg-amber-100 text-amber-700'
+                      : row.dueStatus === 'ongoing'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {row.dueStatus === 'overdue' ? 'Gecikmiş' : row.dueStatus === 'due_soon' ? 'Yaklaşan' : row.dueStatus === 'ongoing' ? 'Planlı' : 'Plansız'}
+                  </div>
                 </div>
               </div>
 
@@ -534,7 +639,7 @@ export default function InstallmentsPage() {
                 <button onClick={() => { const amt = parseInt(payAmount || '0'); if (!amt || amt <= 0) return alert('Geçerli bir tutar girin'); openPaymentModal(rec.apartmentId, amt, 'Ara Ödeme') }} className="px-4 py-2 bg-blue-600 text-white rounded">Ara Ödeme Kaydet</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); setSelectedAptForInstallment(rec.apartmentId); setInstallmentSelectOpen(true) }} className="px-4 py-2 bg-green-600 text-white rounded">Aylık Ödeme Al</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); const remaining = details.remainingBalance || (details.salePrice - (details.depositAmount || 0)); if (!remaining || remaining <= 0) return alert('Ödenecek bakiye yok'); openPaymentModal(rec.apartmentId, remaining, 'Tamamını Öde') }} className="px-4 py-2 bg-red-600 text-white rounded">Tamamını Öde</button>
-                <button onClick={() => handleManageInstallment(rec.apartmentId)} className="px-4 py-2 bg-purple-600 text-white rounded">⚙️ Taksit Bilgileri</button>
+                <button onClick={() => handleManageInstallment(rec.apartmentId)} className="px-4 py-2 bg-purple-600 text-white rounded">?? Taksit Bilgileri</button>
                 <div className="ml-auto text-sm text-gray-400">Son Ödemeler:</div>
               </div>
 
@@ -651,7 +756,7 @@ export default function InstallmentsPage() {
                               </div>
                               {item.isPaid && (
                                 <div className="text-xs mt-1">
-                                  ✓ Ödendi
+                                  ? Ödendi
                                   {item.cancelIndex !== null && (
                                     <button
                                       onClick={() => cancelPayment(rec.apartmentId, item.cancelIndex as number)}
@@ -665,7 +770,7 @@ export default function InstallmentsPage() {
                             </div>
                             {item.isDelayed && !item.isPaid && (
                               <div className="text-xs text-red-600 font-bold mt-1 text-center">
-                                ⚠️ Gecikme Var
+                                ?? Gecikme Var
                               </div>
                             )}
                           </div>
@@ -772,7 +877,7 @@ export default function InstallmentsPage() {
                                 minimumFractionDigits: 0,
                               }).format(amount)}
                             </div>
-                            {alreadyPaid && <div className="text-xs text-gray-500">✓ Ödendi</div>}
+                            {alreadyPaid && <div className="text-xs text-gray-500">? Ödendi</div>}
                           </div>
                         </div>
                       </button>
@@ -823,7 +928,7 @@ export default function InstallmentsPage() {
                                 minimumFractionDigits: 0,
                               }).format(monthlyPayment)}
                             </div>
-                            {alreadyPaid && <div className="text-xs text-gray-500">✓ Ödendi</div>}
+                            {alreadyPaid && <div className="text-xs text-gray-500">? Ödendi</div>}
                           </div>
                         </div>
                       </button>
@@ -849,3 +954,4 @@ export default function InstallmentsPage() {
     </div>
   )
 }
+

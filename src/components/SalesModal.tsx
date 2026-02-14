@@ -126,6 +126,8 @@ export interface SaleData {
   customerName: string
   customerPhone: string
   customerEmail: string
+  customerAddress?: string
+  customerIdentityNo?: string
   paymentAmount?: number
   installmentMonths?: number
   monthlyPayment?: number
@@ -179,6 +181,8 @@ export default function SalesModal({
     customerName: '',
     customerPhone: '',
     customerEmail: '',
+    customerAddress: '',
+    customerIdentityNo: '',
     paymentAmount: '',
     salePrice: '',
     notes: '',
@@ -207,6 +211,8 @@ export default function SalesModal({
         customerName: '',
         customerPhone: '',
         customerEmail: '',
+        customerAddress: '',
+        customerIdentityNo: '',
         paymentAmount: '',
         salePrice: '',
         notes: '',
@@ -260,6 +266,8 @@ export default function SalesModal({
         customerName: formData.customerName,
         customerPhone: formData.customerPhone,
         customerEmail: formData.customerEmail,
+        customerAddress: formData.customerAddress || undefined,
+        customerIdentityNo: formData.customerIdentityNo || undefined,
         paymentAmount: formData.paymentAmount ? parseInt(formData.paymentAmount) : undefined,
         installmentMonths: selectedInstallment > 1 ? selectedInstallment : undefined,
         monthlyPayment: installmentData.payment > 0 ? installmentData.payment : undefined,
@@ -296,8 +304,11 @@ export default function SalesModal({
         onSave(saleDataArray[0])
       }
 
-      setFormData({ customerName: '', customerPhone: '', customerEmail: '', paymentAmount: '', salePrice: '', notes: '' })
+      setFormData({ customerName: '', customerPhone: '', customerEmail: '', customerAddress: '', customerIdentityNo: '', paymentAmount: '', salePrice: '', notes: '' })
       setSelectedInstallment(1)
+    } catch (error) {
+      console.error('Sales modal submit error:', error)
+      alert('Satis kaydi olusturulurken bir hata olustu. Lutfen tekrar deneyin.')
     } finally {
       setIsSubmitting(false)
     }
@@ -600,17 +611,40 @@ export default function SalesModal({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
+                    Email
                   </label>
                   <input
                     type="email"
-                    required
                     value={formData.customerEmail}
                     onChange={e => handleInputChange('customerEmail', e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="email@example.com"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Müşteri Adresi
+                </label>
+                <input
+                  type="text"
+                  value={formData.customerAddress}
+                  onChange={e => handleInputChange('customerAddress', e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Adres (opsiyonel)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  T.C. Kimlik
+                </label>
+                <input
+                  type="text"
+                  value={formData.customerIdentityNo}
+                  onChange={e => handleInputChange('customerIdentityNo', e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="T.C. Kimlik No (opsiyonel)"
+                />
               </div>
             </div>
           </div>

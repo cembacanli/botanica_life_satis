@@ -125,6 +125,18 @@ export default function Dashboard() {
     router.push('/login')
   }
 
+  const soldApartmentIds = new Set(
+    salesRecords.filter((rec: any) => rec.saleType === 'sold').map((rec: any) => rec.apartmentId)
+  )
+  const potentialApartments = apartments.filter(apt => !soldApartmentIds.has(apt.id))
+  const potentialAmount = potentialApartments.reduce((sum, apt) => sum + (apt.price || 0), 0)
+  const potentialAmountFormatted = new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(potentialAmount)
+
   if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center" style={{backgroundImage: 'url(/vaziyet.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}>
@@ -297,7 +309,8 @@ export default function Dashboard() {
             <div className="text-gray-300">Kat</div>
           </div>
           <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <div className="text-3xl font-bold text-purple-400 mb-2">∞</div>
+            <div className="text-xl md:text-2xl font-bold text-purple-400 mb-1">{potentialAmountFormatted}</div>
+            <div className="text-xs text-purple-200 mb-2">{potentialApartments.length} daire satisa acik</div>
             <div className="text-gray-300">Potansiyel</div>
           </div>
         </div>

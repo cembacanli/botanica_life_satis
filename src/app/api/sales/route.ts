@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -14,6 +14,23 @@ export interface SalesRecord {
   date: string
 }
 
+function normalizeSaleDate(input: string) {
+  const parsed = new Date(input)
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString()
+
+  // Fallback for legacy tr-TR date strings: dd.MM.yyyy HH:mm:ss
+  const match = String(input || '').match(/(\d{2})\.(\d{2})\.(\d{4})/)
+  if (match) {
+    const day = parseInt(match[1], 10)
+    const month = parseInt(match[2], 10)
+    const year = parseInt(match[3], 10)
+    const normalized = new Date(year, month - 1, day)
+    if (!Number.isNaN(normalized.getTime())) return normalized.toISOString()
+  }
+
+  return new Date().toISOString()
+}
+
 export async function GET() {
   try {
     const { data, error } = await supabase
@@ -23,7 +40,6 @@ export async function GET() {
 
     if (error) throw error
 
-    // Database'den gelen verileri frontend formatına çevir
     const records = (data || []).map((row: any) => ({
       apartmentId: row.apartment_id,
       saleType: row.sale_type,
@@ -48,43 +64,48 @@ export async function POST(request: NextRequest) {
       ? body.records
       : [body]
 
-    // Her kayıt için upsert yap
     for (const record of records) {
-      // Önce var mı kontrol et
-      const { data: existing } = await supabase
+      const safeDate = normalizeSaleDate(record.date)
+
+      const { data: existing, error: existingError } = await supabase
         .from('sales')
         .select('id')
         .eq('apartment_id', record.apartmentId)
-        .single()
+        .maybeSingle()
+
+      if (existingError) throw existingError
 
       if (existing) {
-        // Güncelle
-        await supabase
+        const { error: updateError } = await supabase
           .from('sales')
           .update({
             sale_type: record.saleType,
             customer_name: record.customerName,
             customer_phone: record.customerPhone,
-            date: record.date,
+            date: safeDate,
           })
           .eq('apartment_id', record.apartmentId)
+
+        if (updateError) throw updateError
       } else {
-        // Ekle
-        await supabase.from('sales').insert({
+        const { error: insertError } = await supabase.from('sales').insert({
           apartment_id: record.apartmentId,
           sale_type: record.saleType,
           customer_name: record.customerName,
           customer_phone: record.customerPhone,
-          date: record.date,
+          date: safeDate,
         })
+
+        if (insertError) throw insertError
       }
     }
 
-    // Güncel listeyi döndür
-    const { data } = await supabase
+    const { data, error: listError } = await supabase
       .from('sales')
       .select('*')
       .order('created_at', { ascending: false })
+
+    if (listError) throw listError
 
     const updated = (data || []).map((row: any) => ({
       apartmentId: row.apartment_id,
@@ -109,13 +130,15 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'apartmentId required' }, { status: 400 })
     }
 
-    await supabase.from('sales').delete().eq('apartment_id', apartmentId)
+    const { error: deleteError } = await supabase.from('sales').delete().eq('apartment_id', apartmentId)
+    if (deleteError) throw deleteError
 
-    // Güncel listeyi döndür
-    const { data } = await supabase
+    const { data, error: listError } = await supabase
       .from('sales')
       .select('*')
       .order('created_at', { ascending: false })
+
+    if (listError) throw listError
 
     const updated = (data || []).map((row: any) => ({
       apartmentId: row.apartment_id,

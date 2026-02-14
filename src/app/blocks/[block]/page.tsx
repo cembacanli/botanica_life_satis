@@ -14,6 +14,13 @@ interface SalesRecord {
   date: string
 }
 
+interface SaleCustomerMeta {
+  customerAddress?: string
+  customerIdentityNo?: string
+}
+
+const SALE_CUSTOMER_META_STORAGE_KEY = 'sale_customer_meta_v1'
+
 export default function BlockPage() {
   const params = useParams()
   const router = useRouter()
@@ -23,14 +30,13 @@ export default function BlockPage() {
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
   const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
+  const [, setSaleCustomerMetaMap] = useState<Record<string, SaleCustomerMeta>>({})
   const [loading, setLoading] = useState(true)
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null)
   const [selectedApartments, setSelectedApartments] = useState<Set<string>>(new Set())
   const [showSalesModal, setShowSalesModal] = useState(false)
   const [filterFloor, setFilterFloor] = useState<string>('')
   const [multiSelectMode, setMultiSelectMode] = useState(false)
-  const [showContractModal, setShowContractModal] = useState(false)
-  const [contractApartment, setContractApartment] = useState<Apartment | null>(null)
 
   useEffect(() => {
     const loadAll = async () => {
@@ -45,6 +51,19 @@ export default function BlockPage() {
 
     loadAll()
   }, [blockName])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SALE_CUSTOMER_META_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        setSaleCustomerMetaMap(parsed)
+      }
+    } catch (error) {
+      console.error('Sale customer meta load error:', error)
+    }
+  }, [])
 
   const fetchSalesRecords = async () => {
     try {
@@ -95,6 +114,41 @@ export default function BlockPage() {
     }
   }
 
+  const upsertSaleCustomerMeta = useCallback((records: SaleData[]) => {
+    setSaleCustomerMetaMap(prev => {
+      const next = { ...prev }
+      records.forEach(record => {
+        const prevMeta = next[record.apartmentId] || {}
+        next[record.apartmentId] = {
+          customerAddress: record.customerAddress ?? prevMeta.customerAddress,
+          customerIdentityNo: record.customerIdentityNo ?? prevMeta.customerIdentityNo,
+        }
+      })
+      try {
+        localStorage.setItem(SALE_CUSTOMER_META_STORAGE_KEY, JSON.stringify(next))
+      } catch (error) {
+        console.error('Sale customer meta save error:', error)
+      }
+      return next
+    })
+  }, [])
+
+  const removeSaleCustomerMeta = useCallback((apartmentIds: string[]) => {
+    if (!apartmentIds.length) return
+    setSaleCustomerMetaMap(prev => {
+      const next = { ...prev }
+      apartmentIds.forEach(id => {
+        delete next[id]
+      })
+      try {
+        localStorage.setItem(SALE_CUSTOMER_META_STORAGE_KEY, JSON.stringify(next))
+      } catch (error) {
+        console.error('Sale customer meta remove error:', error)
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     const intervalId = setInterval(() => {
       fetchSalesRecords()
@@ -119,7 +173,7 @@ export default function BlockPage() {
   }, [salesRecords])
 
   const handleSalesSubmit = useCallback(
-    (saleData: SaleData | SaleData[]) => {
+    async (saleData: SaleData | SaleData[]) => {
       // Çoklu seçim kontrolü
       const dataArray = Array.isArray(saleData) ? saleData : [saleData]
       
@@ -128,19 +182,30 @@ export default function BlockPage() {
         saleType: data.saleType,
         customerName: data.customerName,
         customerPhone: data.customerPhone,
-        date: new Date().toLocaleString('tr-TR'),
+        date: new Date().toISOString(),
       }))
 
-      fetch('/api/sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRecords),
-      })
-        .then(r => r.json())
-        .then(data => {
-          setSalesRecords(Array.isArray(data) ? data : [])
+      try {
+        const salesResponse = await fetch('/api/sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newRecords),
         })
-        .catch(err => console.error('Sales save error:', err))
+
+        const salesData = await salesResponse.json()
+        if (!salesResponse.ok) {
+          const message = salesData?.error || 'Satis kaydi Supabase tarafinda kaydedilemedi.'
+          alert(message)
+          return
+        }
+
+        setSalesRecords(Array.isArray(salesData) ? salesData : [])
+        upsertSaleCustomerMeta(dataArray)
+      } catch (err: any) {
+        console.error('Sales save error:', err)
+        alert('Satis kaydi olusturulamadi. Lutfen internet ve Supabase baglantisini kontrol edin.')
+        return
+      }
 
       // Seçili dairelerin status'unu güncelle
       setApartments(prevApts =>
@@ -251,7 +316,7 @@ export default function BlockPage() {
         `${firstData.customerName} için ${count} ${count > 1 ? 'daire' : 'dairenin'} ${firstData.saleType === 'reservation' ? 'Rezervasyonu' : firstData.saleType === 'deposit' ? 'Kaporası' : 'Satışı'} başarıyla kaydedildi!`
       )
     },
-    [salesRecords, multiSelectMode, selectedApartments, apartments]
+    [salesRecords, multiSelectMode, selectedApartments, apartments, upsertSaleCustomerMeta]
   )
 
   const handleCancelSale = useCallback(
@@ -332,6 +397,7 @@ export default function BlockPage() {
           // Modal'ı kapat
           setShowSalesModal(false)
           setSelectedApartment(null)
+          removeSaleCustomerMeta([apartmentId])
           alert('✓ Satış işlemi başarıyla iptal edildi!')
         })
         .catch(err => {
@@ -339,7 +405,7 @@ export default function BlockPage() {
           alert('❌ İptal işlemi başarısız: ' + err.message)
         })
     },
-    [salesRecords, apartments]
+    [salesRecords, apartments, removeSaleCustomerMeta]
   )
 
   const handleCancelMultiple = useCallback(() => {
@@ -412,6 +478,7 @@ export default function BlockPage() {
         // Modal'ı kapat ve seçimleri temizle
         setShowSalesModal(false)
         setSelectedApartment(null)
+        removeSaleCustomerMeta(selectedAptIds)
         setSelectedApartments(new Set())
         setMultiSelectMode(false)
 
@@ -421,7 +488,7 @@ export default function BlockPage() {
         console.error('Multiple cancel error:', err)
         alert('İptal işlemi sırasında hata oluştu!')
       })
-  }, [selectedApartments, salesRecords, apartments])
+  }, [selectedApartments, salesRecords, apartments, removeSaleCustomerMeta])
 
   // İstatistik hesaplama fonksiyonları
   const calculateBlockStats = (blockLetter: string) => {
@@ -513,83 +580,6 @@ export default function BlockPage() {
 
   const getSalesInfo = (apartmentId: string) => {
     return salesRecords.find(rec => rec.apartmentId === apartmentId)
-  }
-
-  const openContractModal = (apt: Apartment) => {
-    const saleInfo = getSalesInfo(apt.id)
-    if (!saleInfo || saleInfo.saleType !== 'sold') {
-      alert('Sozlesme sadece satilan daireler icin acilir.')
-      return
-    }
-    setContractApartment(apt)
-    setShowContractModal(true)
-  }
-
-  const handlePrintContract = () => {
-    if (!contractApartment) return
-    const saleInfo = getSalesInfo(contractApartment.id)
-    const saleDetails = saleDetailsMap[contractApartment.id] || {}
-    if (!saleInfo) return
-
-    const contractHtml = `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>Daire Satis Sozlesmesi</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 28px; color: #111827; line-height: 1.5; }
-            h1 { text-align: center; margin-bottom: 24px; }
-            .section { margin-bottom: 18px; }
-            .label { font-weight: bold; width: 180px; display: inline-block; }
-            .box { border: 1px solid #d1d5db; padding: 14px; border-radius: 8px; }
-            .sign { margin-top: 54px; display: flex; justify-content: space-between; gap: 24px; }
-            .sign-item { width: 48%; text-align: center; }
-            .line { margin-top: 64px; border-top: 1px solid #111827; padding-top: 6px; }
-          </style>
-        </head>
-        <body>
-          <h1>DAIRE SATIS SOZLESMESI</h1>
-
-          <div class="section box">
-            <div><span class="label">Musteri:</span> ${saleInfo.customerName}</div>
-            <div><span class="label">Telefon:</span> ${saleInfo.customerPhone}</div>
-            <div><span class="label">Islem Tarihi:</span> ${new Date().toLocaleDateString('tr-TR')}</div>
-          </div>
-
-          <div class="section box">
-            <div><span class="label">Blok:</span> ${contractApartment.block}</div>
-            <div><span class="label">Daire No:</span> ${contractApartment.number}</div>
-            <div><span class="label">Kat:</span> ${contractApartment.floor}</div>
-            <div><span class="label">Daire Tipi:</span> ${contractApartment.type}</div>
-            <div><span class="label">Alan:</span> ${contractApartment.area} m²</div>
-          </div>
-
-          <div class="section box">
-            <div><span class="label">Satis Bedeli:</span> ${new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(saleDetails.salePrice || contractApartment.price)}</div>
-            <div><span class="label">Pesinat:</span> ${new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(saleDetails.depositAmount || 0)}</div>
-            <div><span class="label">Kalan Bakiye:</span> ${new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(saleDetails.remainingBalance || 0)}</div>
-          </div>
-
-          <p>Taraflar, yukarida bilgileri yer alan daire satisina iliskin sartlari okuyup kabul etmistir.</p>
-
-          <div class="sign">
-            <div class="sign-item">
-              <div class="line">SATICI IMZA / KASE</div>
-            </div>
-            <div class="sign-item">
-              <div class="line">ALICI IMZA</div>
-            </div>
-          </div>
-        </body>
-      </html>
-    `
-
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
-    printWindow.document.write(contractHtml)
-    printWindow.document.close()
-    printWindow.focus()
-    printWindow.print()
   }
 
   const handleApartmentClick = (apt: Apartment) => {
@@ -877,14 +867,7 @@ export default function BlockPage() {
                               {apt.status === 'available' ? 'Satış Yap' : currentUser?.role === 'admin' ? 'Düzenle / İptal' : statusBadge.label}
                             </button>
 
-                            {apt.status === 'sold' && saleInfo && (
-                              <button
-                                onClick={() => openContractModal(apt)}
-                                className="w-full py-2 rounded-lg font-medium transition-all bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-lg"
-                              >
-                                Sözleşme İmzala
-                              </button>
-                            )}
+                            
                           </div>
                         </div>
                       </div>
@@ -988,14 +971,7 @@ export default function BlockPage() {
                               {apt.status === 'available' ? 'Satış Yap' : currentUser?.role === 'admin' ? 'Düzenle / İptal' : statusBadge.label}
                             </button>
 
-                            {apt.status === 'sold' && saleInfo && (
-                              <button
-                                onClick={() => openContractModal(apt)}
-                                className="w-full py-2 rounded-lg font-medium transition-all bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-lg"
-                              >
-                                Sözleşme İmzala
-                              </button>
-                            )}
+                            
                           </div>
                         </div>
                       </div>
@@ -1102,14 +1078,7 @@ export default function BlockPage() {
                               {apt.status === 'available' ? 'Satış Yap' : currentUser?.role === 'admin' ? 'Düzenle / İptal' : statusBadge.label}
                             </button>
 
-                            {apt.status === 'sold' && saleInfo && (
-                              <button
-                                onClick={() => openContractModal(apt)}
-                                className="w-full py-2 rounded-lg font-medium transition-all bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-lg"
-                              >
-                                Sözleşme İmzala
-                              </button>
-                            )}
+                            
                           </div>
                         </div>
                       </div>
@@ -1213,14 +1182,7 @@ export default function BlockPage() {
                               {apt.status === 'available' ? 'Satış Yap' : currentUser?.role === 'admin' ? 'Düzenle / İptal' : statusBadge.label}
                             </button>
 
-                            {apt.status === 'sold' && saleInfo && (
-                              <button
-                                onClick={() => openContractModal(apt)}
-                                className="w-full py-2 rounded-lg font-medium transition-all bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-lg"
-                              >
-                                Sözleşme İmzala
-                              </button>
-                            )}
+                            
                           </div>
                         </div>
                       </div>
@@ -1328,111 +1290,7 @@ export default function BlockPage() {
         })()}
       </div>
 
-      {showContractModal && contractApartment && (() => {
-        const saleInfo = getSalesInfo(contractApartment.id)
-        const saleDetails = saleDetailsMap[contractApartment.id] || {}
-        if (!saleInfo) return null
-
-        return (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-gradient-to-r from-emerald-700 to-emerald-600 text-white p-6 flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold">Sözleşme İmzala</h2>
-                  <p className="text-white/80 text-sm mt-1">Blok {contractApartment.block} - Daire {contractApartment.number}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowContractModal(false)
-                    setContractApartment(null)
-                  }}
-                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25"
-                >
-                  Kapat
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
-                  <h3 className="font-semibold text-gray-900 mb-3">Müşteri Bilgileri</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-gray-500">Ad Soyad:</span> <span className="font-medium">{saleInfo.customerName}</span></div>
-                    <div><span className="text-gray-500">Telefon:</span> <span className="font-medium">{saleInfo.customerPhone}</span></div>
-                    <div><span className="text-gray-500">Satış Tarihi:</span> <span className="font-medium">{saleInfo.date}</span></div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
-                  <h3 className="font-semibold text-gray-900 mb-3">Daire Bilgileri</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-gray-500">Blok / Daire:</span> <span className="font-medium">{contractApartment.block} / {contractApartment.number}</span></div>
-                    <div><span className="text-gray-500">Kat:</span> <span className="font-medium">{contractApartment.floor}</span></div>
-                    <div><span className="text-gray-500">Tip:</span> <span className="font-medium">{contractApartment.type}</span></div>
-                    <div><span className="text-gray-500">Alan:</span> <span className="font-medium">{contractApartment.area} m²</span></div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
-                  <h3 className="font-semibold text-gray-900 mb-3">Ödeme Özeti</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <div className="text-gray-500">Satış Bedeli</div>
-                      <div className="font-bold text-green-700">
-                        {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(saleDetails.salePrice || contractApartment.price)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Peşinat</div>
-                      <div className="font-bold text-blue-700">
-                        {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(saleDetails.depositAmount || 0)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Kalan Bakiye</div>
-                      <div className="font-bold text-red-700">
-                        {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(saleDetails.remainingBalance || 0)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-dashed border-gray-300 p-4">
-                  <div className="text-sm text-gray-600 mb-8">
-                    Taraflar, satış sözleşmesini okuyup kabul ederek aşağıdaki alanları imzalayacaktır.
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-center">
-                    <div>
-                      <div className="h-16"></div>
-                      <div className="border-t pt-2 text-sm font-medium">SATICI İMZA / KAŞE</div>
-                    </div>
-                    <div>
-                      <div className="h-16"></div>
-                      <div className="border-t pt-2 text-sm font-medium">ALICI İMZA</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 pt-0 flex justify-end gap-3">
-                <a
-                  href="/protokoller/botanica-life-satis-protokolu.docx"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                >
-                  Satış Protokolünü Aç
-                </a>
-                <button
-                  onClick={() => handlePrintContract()}
-                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                >
-                  Yazdır ve İmzala
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      
 
       <SalesModal
         apartment={selectedApartment}
@@ -1449,3 +1307,6 @@ export default function BlockPage() {
     </div>
   )
 }
+
+
+

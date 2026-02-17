@@ -61,6 +61,7 @@ export default function Dashboard() {
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<any[]>([])
   const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
+  const [costs, setCosts] = useState<any[]>([])
 
   useEffect(() => {
     setMounted(true)
@@ -98,6 +99,12 @@ export default function Dashboard() {
         console.error('Error loading sale details:', err)
         setSaleDetailsMap({})
       })
+
+    fetch('/api/costs')
+      .then(r => r.json())
+      .then((data) => setCosts(Array.isArray(data) ? data : []))
+      .catch(() => setCosts([]))
+
   }, [isAuthenticated, loading, router])
 
   useEffect(() => {
@@ -111,6 +118,12 @@ export default function Dashboard() {
         .then(r => r.json())
         .then((data) => setSaleDetailsMap(data || {}))
         .catch(() => undefined)
+
+      fetch('/api/costs')
+        .then(r => r.json())
+        .then((data) => setCosts(Array.isArray(data) ? data : []))
+        .catch(() => undefined)
+
     }, 3000)
 
     return () => clearInterval(intervalId)
@@ -150,6 +163,26 @@ export default function Dashboard() {
       return sum + (saleData.salePrice || 0)
     }, 0)
   const projectTotalSalePrice = soldTotalAmount + potentialAmount
+  const totalDepositAmount = salesRecords
+    .filter((rec: any) => rec.saleType === 'sold')
+    .reduce((sum: number, rec: any) => {
+      const saleData = saleDetailsMap[rec.apartmentId] || {}
+      const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+      return sum + (saleData.depositAmount || 0) + payments
+    }, 0)
+  const totalCostAmount = costs.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+  const netProfitAmount = totalDepositAmount - totalCostAmount
+  const today = new Date()
+  const isSecondDayOfMonth = today.getDate() === 2
+  const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
+  const hasPreviousMonthCost = costs.some((item: any) => {
+    const d = new Date(item.date || item.createdAt || '')
+    if (Number.isNaN(d.getTime())) return false
+    return d >= prevMonthStart && d <= prevMonthEnd
+  })
+  const shouldShowPreviousMonthReminder = isSecondDayOfMonth && !hasPreviousMonthCost
+  const previousMonthLabel = prevMonthStart.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })
   const potentialAmountFormatted = new Intl.NumberFormat('tr-TR', {
     style: 'currency',
     currency: 'TRY',
@@ -208,6 +241,15 @@ export default function Dashboard() {
             </svg>
             Raporlar
           </button>
+          <button
+            onClick={() => router.push('/costs')}
+            className="ml-4 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-3.866 0-7 1.343-7 3v4c0 1.657 3.134 3 7 3s7-1.343 7-3v-4c0-1.657-3.134-3-7-3zm0 0V5m0 3v3" />
+            </svg>
+            Maliyet
+          </button>
           <div className="flex gap-3 ml-4">
             {user?.role === 'admin' && (
               <button
@@ -241,6 +283,12 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
+        {shouldShowPreviousMonthReminder && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+            Hatırlatma: {previousMonthLabel} ayı maliyetlerini girmeniz gerekiyor.
+          </div>
+        )}
 
         {/* Site Plan */}
         <div className="mb-12 -mx-8 px-4 flex justify-center">
@@ -345,6 +393,15 @@ export default function Dashboard() {
                 const apt = apartments.find(a => a.id === rec.apartmentId)
                 return apt && apt.block === key && rec.saleType === 'sold'
               })
+              const soldIdsInBlock = new Set(blockSales.map((rec: any) => rec.apartmentId))
+              const unsoldAptsInBlock = blockApts.filter((apt: any) => !soldIdsInBlock.has(apt.id))
+              const blockPotential = blockApts.reduce((sum: number, apt: any) => {
+                if (soldIdsInBlock.has(apt.id)) return sum
+                return sum + (apt.price || 0)
+              }, 0)
+              const blockAverageSalePrice = unsoldAptsInBlock.length > 0
+                ? blockPotential / unsoldAptsInBlock.length
+                : 0
 
               const totalRevenue = blockSales.reduce((sum: number, rec: any) => {
                 const saleData = saleDetailsMap[rec.apartmentId] || {}
@@ -382,6 +439,14 @@ export default function Dashboard() {
                       const saleData = saleDetailsMap[rec.apartmentId] || {}
                       return sum + (saleData.remainingBalance || ((saleData.salePrice || 0) - (saleData.depositAmount || 0)))
                     }, 0))}
+                  </div>
+                  <div className="text-sm text-gray-300 mt-1">Potansiyel</div>
+                  <div className="text-sm font-semibold text-purple-200">
+                    {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(blockPotential)}
+                  </div>
+                  <div className="text-sm text-gray-300 mt-1">Ortalama Kalan Daire Satış Bedeli</div>
+                  <div className="text-sm font-semibold text-cyan-200">
+                    {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(blockAverageSalePrice)}
                   </div>
                 </div>
               )
@@ -436,6 +501,18 @@ export default function Dashboard() {
                       return sum + (saleData.remainingBalance || ((saleData.salePrice || 0) - (saleData.depositAmount || 0)))
                     }, 0)
                   )}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-300">Toplam Maliyet</div>
+                <div className="text-2xl font-bold text-red-200">
+                  {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(totalCostAmount)}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-300">Kar</div>
+                <div className={`text-2xl font-bold ${netProfitAmount >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>
+                  {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(netProfitAmount)}
                 </div>
               </div>
             </div>

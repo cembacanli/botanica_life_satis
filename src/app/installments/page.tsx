@@ -14,6 +14,8 @@ interface SalesRecord {
   date: string
 }
 
+type ExtraPaymentAllocation = 'next_due' | 'equal_all'
+
 export default function InstallmentsPage() {
   const router = useRouter()
   const formatDateTr = (date: Date) => {
@@ -62,6 +64,14 @@ export default function InstallmentsPage() {
     }
     return count
   }
+  const normalizeLabel = (label?: string) =>
+    (label || '')
+      .trim()
+      .toLocaleLowerCase('tr-TR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+  const isExtraPaymentLabel = (label?: string) => normalizeLabel(label) === 'ara odeme'
   const buildAdjustedSchedule = (details: any, schedule: number[], paidAmount: number) => {
     const months = details?.installmentMonths || 0
     if (months === 0) return []
@@ -102,7 +112,7 @@ export default function InstallmentsPage() {
       const due = schedule[i]
       while (payIdx < payments.length && acc < due) {
         const p = payments[payIdx]
-        if (p.label !== 'Ara Ödeme') {
+        if (!isExtraPaymentLabel(p.label)) {
           acc += p.amount || 0
         }
         payIdx += 1
@@ -129,9 +139,16 @@ export default function InstallmentsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'due_soon' | 'ongoing' | 'no_plan'>('all')
   const [sortBy, setSortBy] = useState<'remaining' | 'next_due' | 'customer'>('remaining')
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
-  const [pendingPayment, setPendingPayment] = useState<{ apartmentId: string; amount: number; label: string } | null>(null)
+  const [pendingPayment, setPendingPayment] = useState<{
+    apartmentId: string
+    amount: number
+    label: string
+    allocation?: ExtraPaymentAllocation
+  } | null>(null)
   const [manageModalOpen, setManageModalOpen] = useState(false)
   const [selectedAptForManage, setSelectedAptForManage] = useState<string | null>(null)
+  const [extraPaymentOptionOpen, setExtraPaymentOptionOpen] = useState(false)
+  const [pendingExtraPayment, setPendingExtraPayment] = useState<{ apartmentId: string; amount: number } | null>(null)
   
   // Taksit seçim modal
   const [installmentSelectOpen, setInstallmentSelectOpen] = useState(false)
@@ -206,9 +223,13 @@ export default function InstallmentsPage() {
     return saleDetailsMap[apartmentId] || null
   }
   // Apply payment to sale details
-  const applyPayment = (apartmentId: string, amt: number, label: string) => {
+  const applyPayment = (apartmentId: string, amt: number, label: string, allocation?: ExtraPaymentAllocation) => {
     const details = getSaleDetails(apartmentId)
     if (!details) return alert('Satış detayı bulunamadı')
+    if (isExtraPaymentLabel(label) && !allocation) {
+      alert('Ara ödeme için önce düşüm yöntemini seçin.')
+      return
+    }
     
     // ? Kontrol: Yeni toplam ödeme ? Daire Bedeli
     const depositAmount = details.depositAmount || 0
@@ -220,35 +241,62 @@ export default function InstallmentsPage() {
       return alert(`Hata: Toplam ödeme (?${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(newTotalPayment)}) daire bedelini (?${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0 }).format(salePrice)}) aşamaz!`)
     }
     
-    const payment = { amount: amt, date: new Date().toISOString(), label }
+    const payment = {
+      amount: amt,
+      date: new Date().toISOString(),
+      label,
+      allocation: isExtraPaymentLabel(label) ? allocation : undefined,
+    }
     details.payments = details.payments || []
     details.payments.push(payment)
     
     const oldBalance = details.remainingBalance || (details.salePrice - (details.depositAmount || 0))
     details.remainingBalance = Math.max(0, oldBalance - amt)
     
-    // ? SADECE "Ara Ödeme" için custom schedule'ı eşit olarak azalt!
-    if (label === 'Ara Ödeme' && details.customSchedule && details.customSchedule.length > 0 && amt > 0) {
-      const schedule = details.customSchedule
+    // Ara ödeme seçimine göre taksitlere dağıtım uygula
+    if (isExtraPaymentLabel(label) && amt > 0) {
+      const schedule = details.customSchedule || details.installmentSchedule || buildScheduleAmounts(details)
+      if (!Array.isArray(schedule) || schedule.length === 0) {
+        const updated = { ...saleDetailsMap, [apartmentId]: details }
+        setSaleDetailsMap(updated)
+        fetch('/api/sale-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(details),
+        }).catch(err => console.error('Sale details save error:', err))
+        setPayAmount('')
+        setSelectedApt(null)
+        setRefreshKey(k => k + 1)
+        return
+      }
+
       const paidAmountInstallments = (details.payments || [])
-        .filter((p: any) => p.label !== 'Ara Ödeme')
+        .filter((p: any) => !isExtraPaymentLabel(p.label))
         .reduce((s: number, p: any) => s + (p.amount || 0), 0)
       const paidCount = getInstallmentsPaidCount(schedule, paidAmountInstallments)
       const unpaidCount = Math.max(0, schedule.length - paidCount)
       
       if (unpaidCount > 0) {
-        // Ara ödemeyi sadece ödenmemiş taksitlere dağıt
-        const amountPerInstallment = amt / unpaidCount
         const newSchedule = [...schedule]
-        
-        for (let i = paidCount; i < schedule.length; i++) {
-          newSchedule[i] = Math.max(0, schedule[i] - amountPerInstallment)
+
+        if (allocation === 'next_due') {
+          // 1) Yaklaşan taksitten başla, gerekirse sonraki taksitlere devam et
+          let remaining = amt
+          for (let i = paidCount; i < schedule.length && remaining > 0; i++) {
+            const reduce = Math.min(remaining, newSchedule[i] || 0)
+            newSchedule[i] = Math.max(0, (newSchedule[i] || 0) - reduce)
+            remaining -= reduce
+          }
+        } else {
+          // 2) Tüm kalan taksitlere eşit düş
+          const amountPerInstallment = amt / unpaidCount
+          for (let i = paidCount; i < schedule.length; i++) {
+            newSchedule[i] = Math.max(0, (schedule[i] || 0) - amountPerInstallment)
+          }
         }
-        
+
         details.customSchedule = newSchedule
-        if (details.installmentSchedule) {
-          details.installmentSchedule = newSchedule
-        }
+        details.installmentSchedule = newSchedule
       }
     }
     
@@ -276,27 +324,32 @@ export default function InstallmentsPage() {
     details.remainingBalance = Math.max(0, totalDebt - totalPaid)
 
     // ? Ara ödeme iptal edilirse, custom schedule'ı eşit olarak restore et
-    if (cancelledPayment?.label === 'Ara Ödeme' && details.customSchedule && details.customSchedule.length > 0) {
+    if (isExtraPaymentLabel(cancelledPayment?.label) && details.customSchedule && details.customSchedule.length > 0) {
       const schedule = details.customSchedule
       const paidAmountInstallments = (updatedPayments || [])
-        .filter((p: any) => p.label !== 'Ara Ödeme')
+        .filter((p: any) => !isExtraPaymentLabel(p.label))
         .reduce((s: number, p: any) => s + (p.amount || 0), 0)
       const paidCount = getInstallmentsPaidCount(schedule, paidAmountInstallments)
       const unpaidCount = Math.max(0, schedule.length - paidCount)
       
       if (unpaidCount > 0 && cancelledPayment?.amount) {
-        // İptal edilen tutarı sadece ödenmemiş taksitlere geri ekle
-        const amountPerInstallment = (cancelledPayment.amount || 0) / unpaidCount
         const newSchedule = [...schedule]
-        
-        for (let i = paidCount; i < schedule.length; i++) {
-          newSchedule[i] = newSchedule[i] + amountPerInstallment
+
+        const allocationMode = cancelledPayment?.allocation || 'next_due'
+        if (allocationMode === 'next_due') {
+          // Yaklaşan taksite geri ekle
+          const targetIndex = Math.min(Math.max(paidCount, 0), Math.max(schedule.length - 1, 0))
+          newSchedule[targetIndex] = (newSchedule[targetIndex] || 0) + (cancelledPayment.amount || 0)
+        } else {
+          // Eşit dağıtım iptalinde kalan taksitlere eşit geri ekle
+          const amountPerInstallment = (cancelledPayment.amount || 0) / unpaidCount
+          for (let i = paidCount; i < schedule.length; i++) {
+            newSchedule[i] = (newSchedule[i] || 0) + amountPerInstallment
+          }
         }
         
         details.customSchedule = newSchedule
-        if (details.installmentSchedule) {
-          details.installmentSchedule = newSchedule
-        }
+        details.installmentSchedule = newSchedule
       }
     }
 
@@ -310,14 +363,21 @@ export default function InstallmentsPage() {
     setRefreshKey(k => k + 1)
   }
 
-  const openPaymentModal = (apartmentId: string, amount: number, label: string) => {
-    setPendingPayment({ apartmentId, amount, label })
+  const openPaymentModal = (apartmentId: string, amount: number, label: string, allocation?: ExtraPaymentAllocation) => {
+    setPendingPayment({ apartmentId, amount, label, allocation })
     setPaymentModalOpen(true)
   }
 
   const confirmPayment = (amount: number, print: boolean) => {
     if (!pendingPayment) return
-    applyPayment(pendingPayment.apartmentId, amount, pendingPayment.label)
+    if (isExtraPaymentLabel(pendingPayment.label) && !pendingPayment.allocation) {
+      setPaymentModalOpen(false)
+      setPendingExtraPayment({ apartmentId: pendingPayment.apartmentId, amount })
+      setPendingPayment(null)
+      setExtraPaymentOptionOpen(true)
+      return
+    }
+    applyPayment(pendingPayment.apartmentId, amount, pendingPayment.label, pendingPayment.allocation)
     setPaymentModalOpen(false)
 
     if (print) {
@@ -399,6 +459,7 @@ export default function InstallmentsPage() {
     }
     if (data.installmentScheduleDates && data.installmentScheduleDates.length > 0) {
       details.customScheduleDates = data.installmentScheduleDates
+      details.installmentScheduleDates = data.installmentScheduleDates
     }
 
     setSaleDetailsMap(prev => ({ ...prev, [selectedAptForManage]: details }))
@@ -408,6 +469,7 @@ export default function InstallmentsPage() {
       body: JSON.stringify(details),
     }).catch(err => console.error('Sale details save error:', err))
     setRefreshKey(k => k + 1)
+    setManageModalOpen(false)
     setSelectedAptForManage(null)
   }
 
@@ -425,7 +487,7 @@ export default function InstallmentsPage() {
 
       const scheduleAmounts = buildScheduleAmounts(details)
       const paidFromInstallments = (details?.payments || [])
-        .filter((p: any) => p.label !== 'Ara Ödeme' && p.label !== 'Ara Odeme')
+        .filter((p: any) => !isExtraPaymentLabel(p.label))
         .reduce((s: number, p: any) => s + (p.amount || 0), 0)
       const installmentsPaid = getInstallmentsPaidCount(scheduleAmounts, paidFromInstallments)
       const scheduleDates = details?.customScheduleDates || details?.installmentScheduleDates || []
@@ -636,10 +698,17 @@ export default function InstallmentsPage() {
                 {/* Ödeme kaydetme */}
               <div className="mt-4 flex gap-2 flex-wrap">
                 <input value={selectedApt === rec.apartmentId ? payAmount : ''} onChange={e => { setSelectedApt(rec.apartmentId); setPayAmount(e.target.value) }} className="px-3 py-2 border rounded w-56" placeholder="Ara ödeme tutarı" />
-                <button onClick={() => { const amt = parseInt(payAmount || '0'); if (!amt || amt <= 0) return alert('Geçerli bir tutar girin'); openPaymentModal(rec.apartmentId, amt, 'Ara Ödeme') }} className="px-4 py-2 bg-blue-600 text-white rounded">Ara Ödeme Kaydet</button>
+                <button onClick={() => {
+                  const amt = parseInt(payAmount || '0')
+                  if (!amt || amt <= 0) return alert('Geçerli bir tutar girin')
+                  setPaymentModalOpen(false)
+                  setPendingPayment(null)
+                  setPendingExtraPayment({ apartmentId: rec.apartmentId, amount: amt })
+                  setExtraPaymentOptionOpen(true)
+                }} className="px-4 py-2 bg-blue-600 text-white rounded">Ara Ödeme Kaydet</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); setSelectedAptForInstallment(rec.apartmentId); setInstallmentSelectOpen(true) }} className="px-4 py-2 bg-green-600 text-white rounded">Aylık Ödeme Al</button>
                 <button onClick={() => { const details = getSaleDetails(rec.apartmentId); if (!details) return alert('Satış detayı bulunamadı'); const remaining = details.remainingBalance || (details.salePrice - (details.depositAmount || 0)); if (!remaining || remaining <= 0) return alert('Ödenecek bakiye yok'); openPaymentModal(rec.apartmentId, remaining, 'Tamamını Öde') }} className="px-4 py-2 bg-red-600 text-white rounded">Tamamını Öde</button>
-                <button onClick={() => handleManageInstallment(rec.apartmentId)} className="px-4 py-2 bg-purple-600 text-white rounded">?? Taksit Bilgileri</button>
+                <button onClick={() => handleManageInstallment(rec.apartmentId)} className="px-4 py-2 bg-purple-600 text-white rounded">Taksit Bilgileri</button>
                 <div className="ml-auto text-sm text-gray-400">Son Ödemeler:</div>
               </div>
 
@@ -665,7 +734,7 @@ export default function InstallmentsPage() {
                       const startDate = details.startDate ? new Date(details.startDate) : new Date()
 
                       const paidFromInstallments = (details.payments || [])
-                        .filter((p: any) => p.label !== 'Ara Ödeme')
+                        .filter((p: any) => !isExtraPaymentLabel(p.label))
                         .reduce((s: number, p: any) => s + (p.amount || 0), 0)
                       const scheduleAmounts = buildScheduleAmounts(details)
                       const adjustedSchedule = buildAdjustedSchedule(details, scheduleAmounts, paidFromInstallments)
@@ -697,7 +766,7 @@ export default function InstallmentsPage() {
                       })
 
                       const extras = (details.payments || [])
-                        .filter((p: any) => p.label === 'Ara Ödeme')
+                        .filter((p: any) => isExtraPaymentLabel(p.label))
                         .map((p: any, idx: number) => ({
                           key: `extra-${idx}`,
                           type: 'extra' as const,
@@ -756,7 +825,7 @@ export default function InstallmentsPage() {
                               </div>
                               {item.isPaid && (
                                 <div className="text-xs mt-1">
-                                  ? Ödendi
+                                  Ödendi
                                   {item.cancelIndex !== null && (
                                     <button
                                       onClick={() => cancelPayment(rec.apartmentId, item.cancelIndex as number)}
@@ -770,7 +839,7 @@ export default function InstallmentsPage() {
                             </div>
                             {item.isDelayed && !item.isPaid && (
                               <div className="text-xs text-red-600 font-bold mt-1 text-center">
-                                ?? Gecikme Var
+                                Gecikme Var
                               </div>
                             )}
                           </div>
@@ -800,7 +869,10 @@ export default function InstallmentsPage() {
         return (
           <InstallmentManageModal
             isOpen={manageModalOpen}
-            onClose={() => setManageModalOpen(false)}
+            onClose={() => {
+              setManageModalOpen(false)
+              setSelectedAptForManage(null)
+            }}
             onSave={handleSaveInstallment}
             currentData={enrichedData}
           />
@@ -813,7 +885,7 @@ export default function InstallmentsPage() {
         const details = getSaleDetails(selectedAptForInstallment)
         const baseSchedule = buildScheduleAmounts(details)
         const paidAmountInstallments = (details?.payments || [])
-          .filter((p: any) => p.label !== 'Ara Ödeme')
+          .filter((p: any) => !isExtraPaymentLabel(p.label))
           .reduce((sum: number, p: { amount?: number }) => sum + (p.amount || 0), 0)
         const installmentSchedule = buildAdjustedSchedule(details, baseSchedule, paidAmountInstallments)
         const installmentScheduleDates = (details?.customScheduleDates || details?.installmentScheduleDates || []) as string[]
@@ -877,7 +949,7 @@ export default function InstallmentsPage() {
                                 minimumFractionDigits: 0,
                               }).format(amount)}
                             </div>
-                            {alreadyPaid && <div className="text-xs text-gray-500">? Ödendi</div>}
+                            {alreadyPaid && <div className="text-xs text-gray-500">Ödendi</div>}
                           </div>
                         </div>
                       </button>
@@ -928,7 +1000,7 @@ export default function InstallmentsPage() {
                                 minimumFractionDigits: 0,
                               }).format(monthlyPayment)}
                             </div>
-                            {alreadyPaid && <div className="text-xs text-gray-500">? Ödendi</div>}
+                            {alreadyPaid && <div className="text-xs text-gray-500">Ödendi</div>}
                           </div>
                         </div>
                       </button>
@@ -950,6 +1022,53 @@ export default function InstallmentsPage() {
           </div>
         )
       })()}
+
+      {/* Ara Ödeme Dağıtım Seçimi */}
+      {extraPaymentOptionOpen && pendingExtraPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4 shadow-2xl">
+            <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-lg font-bold">Ara Ödeme Nasıl Düşülsün?</h2>
+            </div>
+            <div className="p-6 space-y-3">
+              <button
+                onClick={() => {
+                  openPaymentModal(pendingExtraPayment.apartmentId, pendingExtraPayment.amount, 'Ara Ödeme', 'next_due')
+                  setExtraPaymentOptionOpen(false)
+                  setPendingExtraPayment(null)
+                }}
+                className="w-full p-4 rounded-lg border-2 bg-blue-50 border-blue-300 hover:bg-blue-100 text-left"
+              >
+                <div className="font-bold text-blue-800">1. Yaklaşan taksitten düş</div>
+                <div className="text-sm text-blue-700">Tutar önce sıradaki taksitten düşer, artarsa sonraki taksitlere aktarılır.</div>
+              </button>
+
+              <button
+                onClick={() => {
+                  openPaymentModal(pendingExtraPayment.apartmentId, pendingExtraPayment.amount, 'Ara Ödeme', 'equal_all')
+                  setExtraPaymentOptionOpen(false)
+                  setPendingExtraPayment(null)
+                }}
+                className="w-full p-4 rounded-lg border-2 bg-green-50 border-green-300 hover:bg-green-100 text-left"
+              >
+                <div className="font-bold text-green-800">2. Tüm borçtan eşit şekilde düş</div>
+                <div className="text-sm text-green-700">Tutar, kalan tüm taksitlere eşit dağıtılarak düşülür.</div>
+              </button>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 rounded-b-lg border-t flex justify-end">
+              <button
+                onClick={() => {
+                  setExtraPaymentOptionOpen(false)
+                  setPendingExtraPayment(null)
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium"
+              >
+                İptal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )

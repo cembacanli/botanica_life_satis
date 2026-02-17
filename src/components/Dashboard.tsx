@@ -128,8 +128,28 @@ export default function Dashboard() {
   const soldApartmentIds = new Set(
     salesRecords.filter((rec: any) => rec.saleType === 'sold').map((rec: any) => rec.apartmentId)
   )
+  const landOwnerApartmentIds = new Set(
+    salesRecords
+      .filter((rec: any) => {
+        if (rec.saleType !== 'sold') return false
+        const name = (rec.customerName || '')
+          .toLocaleLowerCase('tr-TR')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+        const saleData = saleDetailsMap[rec.apartmentId] || {}
+        return name.includes('arsa sahibi') || (saleData.salePrice || 0) <= 0
+      })
+      .map((rec: any) => rec.apartmentId)
+  )
   const potentialApartments = apartments.filter(apt => !soldApartmentIds.has(apt.id))
   const potentialAmount = potentialApartments.reduce((sum, apt) => sum + (apt.price || 0), 0)
+  const soldTotalAmount = salesRecords
+    .filter((rec: any) => rec.saleType === 'sold' && !landOwnerApartmentIds.has(rec.apartmentId))
+    .reduce((sum: number, rec: any) => {
+      const saleData = saleDetailsMap[rec.apartmentId] || {}
+      return sum + (saleData.salePrice || 0)
+    }, 0)
+  const projectTotalSalePrice = soldTotalAmount + potentialAmount
   const potentialAmountFormatted = new Intl.NumberFormat('tr-TR', {
     style: 'currency',
     currency: 'TRY',
@@ -372,6 +392,12 @@ export default function Dashboard() {
           <div className="bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
             <h3 className="text-lg font-bold text-white mb-2">🏢 Proje Toplamı</h3>
             <div className="flex items-center gap-6">
+              <div>
+                <div className="text-sm text-gray-300">Proje Toplam Satış Bedeli</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(projectTotalSalePrice)}
+                </div>
+              </div>
               <div>
                 <div className="text-sm text-gray-300">Toplam Satılan</div>
                 <div className="text-2xl font-bold text-white">

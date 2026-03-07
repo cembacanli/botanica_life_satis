@@ -264,6 +264,20 @@ export default function Dashboard() {
             </svg>
             Taseron / Hakedis
           </button>
+          <button
+            onClick={() => router.push('/plans')}
+            className="ml-4 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2m0 18l6-3m-6 3V2m6 15l6-3m-6 3V5m6 9V3.618a1 1 0 00-.553-.894L15 0"
+              />
+            </svg>
+            Planlar
+          </button>
           <div className="flex gap-3 ml-4">
             {user?.role === 'admin' && (
               <button

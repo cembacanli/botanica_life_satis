@@ -1,0 +1,44 @@
+﻿<svg width="1200" height="760" viewBox="0 0 1200 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1200" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#1F2937"/>
+    </linearGradient>
+    <linearGradient id="slab2" x1="120" y1="80" x2="980" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#E5E7EB"/>
+    </linearGradient>
+    <filter id="shadow2" x="0" y="0" width="1200" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="760" fill="url(#bg2)"/>
+
+  <g filter="url(#shadow2)" transform="translate(120,70) skewX(-10)">
+    <rect x="80" y="60" width="900" height="560" rx="12" fill="url(#slab2)" stroke="#94A3B8" stroke-width="4"/>
+
+    <rect x="120" y="100" width="460" height="280" fill="#FDE68A" stroke="#A16207" stroke-width="3"/>
+    <text x="145" y="150" font-family="Arial" font-size="30" font-weight="700" fill="#78350F">SALON + ACIK MUTFAK</text>
+    <text x="145" y="186" font-family="Arial" font-size="22" fill="#78350F">22 m2</text>
+
+    <rect x="600" y="100" width="340" height="260" fill="#BFDBFE" stroke="#1D4ED8" stroke-width="3"/>
+    <text x="625" y="150" font-family="Arial" font-size="30" font-weight="700" fill="#1E3A8A">YATAK ODASI</text>
+    <text x="625" y="186" font-family="Arial" font-size="22" fill="#1E3A8A">14 m2</text>
+
+    <rect x="600" y="380" width="160" height="120" fill="#FED7AA" stroke="#C2410C" stroke-width="3"/>
+    <text x="620" y="425" font-family="Arial" font-size="22" font-weight="700" fill="#7C2D12">BANYO</text>
+    <text x="620" y="455" font-family="Arial" font-size="20" fill="#7C2D12">5 m2</text>
+
+    <rect x="780" y="380" width="160" height="120" fill="#DDD6FE" stroke="#6D28D9" stroke-width="3"/>
+    <text x="800" y="425" font-family="Arial" font-size="22" font-weight="700" fill="#4C1D95">ANTRE</text>
+    <text x="800" y="455" font-family="Arial" font-size="20" fill="#4C1D95">4 m2</text>
+
+    <rect x="120" y="400" width="460" height="160" fill="#A7F3D0" stroke="#047857" stroke-width="3"/>
+    <text x="145" y="455" font-family="Arial" font-size="28" font-weight="700" fill="#064E3B">BALKON</text>
+    <text x="145" y="490" font-family="Arial" font-size="22" fill="#064E3B">4 m2</text>
+  </g>
+
+  <text x="70" y="60" font-family="Arial" font-size="40" font-weight="700" fill="#E5E7EB">C / D BLOK - 1+1 DAIRE PLANI (45 m2)</text>
+  <text x="70" y="715" font-family="Arial" font-size="22" fill="#CBD5E1">3D hissiyatli isometrik sunum - satis ofisi tanitim icin</text>
+</svg>

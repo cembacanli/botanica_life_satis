@@ -1114,7 +1114,8 @@ export default function ConstructionCostsPage() {
                         </div>
                       </div>
 
-                      <div className="sticky top-24 z-20 mt-5 space-y-3 rounded-2xl border border-stone-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+                      <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(320px,380px)_minmax(0,1fr)] xl:items-start">
+                      <div className="xl:sticky xl:top-24 xl:z-20 space-y-3 rounded-2xl border border-stone-200 bg-white/95 p-3 shadow-sm backdrop-blur">
                         <div className="flex items-center justify-between gap-4">
                         <div>
                           <h4 className="text-base font-semibold text-stone-900">{block.name} maliyet kalemleri</h4>
@@ -1385,7 +1386,7 @@ export default function ConstructionCostsPage() {
                       </div>
                       </div>
 
-                      <div className="mt-4 overflow-x-auto rounded-2xl border border-stone-200 bg-white">
+                      <div className="min-w-0 overflow-x-auto rounded-2xl border border-stone-200 bg-white">
                         <table className="min-w-full text-sm">
                           <thead className="sticky top-0 z-10 bg-white shadow-sm">
                             <tr className="border-b border-stone-200 text-left text-stone-500">
@@ -1473,6 +1474,7 @@ export default function ConstructionCostsPage() {
                             )}
                           </tbody>
                         </table>
+                      </div>
                       </div>
                     </div>
                   )

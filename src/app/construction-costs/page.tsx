@@ -17,6 +17,39 @@ type CostItem = {
 type MainCategory = 'Kaba' | 'Ince' | 'Mekanik' | 'Elektrik' | 'Cevre Duzenleme' | 'Diger'
 
 const MAIN_CATEGORY_ORDER: MainCategory[] = ['Kaba', 'Ince', 'Mekanik', 'Elektrik', 'Cevre Duzenleme']
+const CATEGORY_SEPARATOR = ' - '
+const SUBCATEGORY_ACCENTS = [
+  {
+    dot: 'bg-rose-500',
+    active: 'border-rose-300 bg-rose-50 text-rose-800',
+    idle: 'border-rose-200 bg-white text-stone-700 hover:border-rose-300 hover:bg-rose-50/60',
+  },
+  {
+    dot: 'bg-sky-500',
+    active: 'border-sky-300 bg-sky-50 text-sky-800',
+    idle: 'border-sky-200 bg-white text-stone-700 hover:border-sky-300 hover:bg-sky-50/60',
+  },
+  {
+    dot: 'bg-emerald-500',
+    active: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+    idle: 'border-emerald-200 bg-white text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/60',
+  },
+  {
+    dot: 'bg-violet-500',
+    active: 'border-violet-300 bg-violet-50 text-violet-800',
+    idle: 'border-violet-200 bg-white text-stone-700 hover:border-violet-300 hover:bg-violet-50/60',
+  },
+  {
+    dot: 'bg-amber-500',
+    active: 'border-amber-300 bg-amber-50 text-amber-800',
+    idle: 'border-amber-200 bg-white text-stone-700 hover:border-amber-300 hover:bg-amber-50/60',
+  },
+  {
+    dot: 'bg-cyan-500',
+    active: 'border-cyan-300 bg-cyan-50 text-cyan-800',
+    idle: 'border-cyan-200 bg-white text-stone-700 hover:border-cyan-300 hover:bg-cyan-50/60',
+  },
+] as const
 
 type BlockInput = {
   id: string
@@ -46,6 +79,14 @@ type SavedScenario = {
   savedAt: string
   inputs: ScenarioInputs
   blocks: BlockInput[]
+}
+
+type SubCategoryContextMenuState = {
+  blockId: string
+  mainCategory: MainCategory | ''
+  category: string
+  x: number
+  y: number
 }
 
 type BlockMetrics = {
@@ -235,6 +276,30 @@ function getDefaultUnitForCategory(category: string) {
   return 'm2'
 }
 
+function getSubCategoryLabel(category: string, mainCategory: MainCategory | '') {
+  if (!category) return ''
+  if (!mainCategory || mainCategory === 'Diger') return category
+
+  const prefix = `${mainCategory}${CATEGORY_SEPARATOR}`
+  return category.startsWith(prefix) ? category.slice(prefix.length).trim() : category
+}
+
+function buildCategoryName(mainCategory: MainCategory | '', subCategoryLabel: string) {
+  const trimmedLabel = subCategoryLabel.trim()
+  if (!trimmedLabel) return ''
+  if (!mainCategory || mainCategory === 'Diger') return trimmedLabel
+  return `${mainCategory}${CATEGORY_SEPARATOR}${trimmedLabel}`
+}
+
+function getSubCategoryAccent(category: string) {
+  const source = String(category || '')
+  let hash = 0
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0
+  }
+  return SUBCATEGORY_ACCENTS[hash % SUBCATEGORY_ACCENTS.length]
+}
+
 function getSubtotalRowClass(mainCategory: MainCategory | '') {
   if (mainCategory === 'Kaba') return 'border-stone-300 bg-stone-100 text-stone-900'
   if (mainCategory === 'Ince') return 'border-amber-300 bg-amber-50 text-amber-900'
@@ -254,9 +319,23 @@ export default function ConstructionCostsPage() {
   const [scenariosLoading, setScenariosLoading] = useState(false)
   const [activeMainCategoryByBlock, setActiveMainCategoryByBlock] = useState<Record<string, MainCategory>>({})
   const [activeSubCategoryByBlock, setActiveSubCategoryByBlock] = useState<Record<string, string>>({})
+  const [subCategoryDraftByBlock, setSubCategoryDraftByBlock] = useState<Record<string, string>>({})
+  const [editingSubCategoryByBlock, setEditingSubCategoryByBlock] = useState<Record<string, string>>({})
+  const [newSubCategoryByBlock, setNewSubCategoryByBlock] = useState<Record<string, string>>({})
+  const [subCategoryContextMenu, setSubCategoryContextMenu] = useState<SubCategoryContextMenuState | null>(null)
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    const closeMenu = () => setSubCategoryContextMenu(null)
+    window.addEventListener('click', closeMenu)
+    window.addEventListener('scroll', closeMenu, true)
+    return () => {
+      window.removeEventListener('click', closeMenu)
+      window.removeEventListener('scroll', closeMenu, true)
+    }
   }, [])
 
   useEffect(() => {
@@ -284,6 +363,78 @@ export default function ConstructionCostsPage() {
     }
     loadScenarios()
   }, [mounted, isAuthenticated, user])
+
+  useEffect(() => {
+    setActiveMainCategoryByBlock(prev => {
+      let changed = false
+      const next = { ...prev }
+
+      blocks.forEach(block => {
+        const categories = getMainCategoriesForBlock(block)
+        const fallbackCategory = categories[0] || ''
+        const currentCategory = prev[block.id]
+
+        if (!fallbackCategory) {
+          if (currentCategory) {
+            changed = true
+            delete next[block.id]
+          }
+          return
+        }
+
+        if (!currentCategory || !categories.includes(currentCategory)) {
+          changed = true
+          next[block.id] = fallbackCategory
+        }
+      })
+
+      return changed ? next : prev
+    })
+  }, [blocks])
+
+  useEffect(() => {
+    setActiveSubCategoryByBlock(prev => {
+      let changed = false
+      const next = { ...prev }
+
+      blocks.forEach(block => {
+        const mainCategory =
+          activeMainCategoryByBlock[block.id] && getMainCategoriesForBlock(block).includes(activeMainCategoryByBlock[block.id])
+            ? activeMainCategoryByBlock[block.id]
+            : getMainCategoriesForBlock(block)[0] || ''
+        const categories = getSubCategoriesForBlock(block, mainCategory)
+        const fallbackCategory = categories[0] || ''
+        const currentCategory = prev[block.id]
+
+        if (!fallbackCategory) {
+          if (currentCategory) {
+            changed = true
+            delete next[block.id]
+          }
+          return
+        }
+
+        if (!currentCategory || !categories.includes(currentCategory)) {
+          changed = true
+          next[block.id] = fallbackCategory
+        }
+      })
+
+      return changed ? next : prev
+    })
+  }, [activeMainCategoryByBlock, blocks])
+
+  useEffect(() => {
+    setSubCategoryDraftByBlock(prev => {
+      const next = { ...prev }
+      blocks.forEach(block => {
+        const mainCategory = getActiveMainCategory(block)
+        const subCategory = getActiveSubCategory(block, mainCategory)
+        next[block.id] = getSubCategoryLabel(subCategory, mainCategory)
+      })
+      return next
+    })
+  }, [activeMainCategoryByBlock, activeSubCategoryByBlock, blocks])
 
   const blockMetrics = useMemo(() => blocks.map(createMetricsForBlock), [blocks])
 
@@ -380,6 +531,13 @@ export default function ConstructionCostsPage() {
       ? activeSubCategoryByBlock[block.id]
       : categories[0]
   }
+
+  const syncSubCategoryDraft = (blockId: string, mainCategory: MainCategory | '', category: string) => {
+    setSubCategoryDraftByBlock(prev => ({
+      ...prev,
+      [blockId]: getSubCategoryLabel(category, mainCategory),
+    }))
+  }
   const updateBlock = (blockId: string, field: keyof Omit<BlockInput, 'id' | 'items'>, value: string | number) => {
     setBlocks(prev => prev.map(block => (block.id === blockId ? { ...block, [field]: value } : block)))
   }
@@ -401,13 +559,18 @@ export default function ConstructionCostsPage() {
     setBlocks(prev => {
       const nextBlock = createBlock(prev.length)
       const nextMain = getMainCategoriesForBlock(nextBlock)[0] || ''
+      const nextSub = getSubCategoriesForBlock(nextBlock, nextMain)[0] || ''
       setActiveMainCategoryByBlock(current => ({
         ...current,
         [nextBlock.id]: nextMain,
       }))
       setActiveSubCategoryByBlock(current => ({
         ...current,
-        [nextBlock.id]: getSubCategoriesForBlock(nextBlock, nextMain)[0] || '',
+        [nextBlock.id]: nextSub,
+      }))
+      setSubCategoryDraftByBlock(current => ({
+        ...current,
+        [nextBlock.id]: getSubCategoryLabel(nextSub, nextMain),
       }))
       return [...prev, nextBlock]
     })
@@ -419,13 +582,18 @@ export default function ConstructionCostsPage() {
       if (!source) return prev
       const nextBlock = cloneBlock(source, prev.length)
       const nextMain = getMainCategoriesForBlock(nextBlock)[0] || ''
+      const nextSub = getSubCategoriesForBlock(nextBlock, nextMain)[0] || ''
       setActiveMainCategoryByBlock(current => ({
         ...current,
         [nextBlock.id]: nextMain,
       }))
       setActiveSubCategoryByBlock(current => ({
         ...current,
-        [nextBlock.id]: getSubCategoriesForBlock(nextBlock, nextMain)[0] || '',
+        [nextBlock.id]: nextSub,
+      }))
+      setSubCategoryDraftByBlock(current => ({
+        ...current,
+        [nextBlock.id]: getSubCategoryLabel(nextSub, nextMain),
       }))
       return [...prev, nextBlock]
     })
@@ -439,6 +607,21 @@ export default function ConstructionCostsPage() {
       return next
     })
     setActiveSubCategoryByBlock(prev => {
+      const next = { ...prev }
+      delete next[blockId]
+      return next
+    })
+    setSubCategoryDraftByBlock(prev => {
+      const next = { ...prev }
+      delete next[blockId]
+      return next
+    })
+    setEditingSubCategoryByBlock(prev => {
+      const next = { ...prev }
+      delete next[blockId]
+      return next
+    })
+    setNewSubCategoryByBlock(prev => {
       const next = { ...prev }
       delete next[blockId]
       return next
@@ -500,6 +683,153 @@ export default function ConstructionCostsPage() {
     )
   }
 
+  const renameSubCategory = (blockId: string, mainCategory: MainCategory | '', currentCategory: string, nextLabel: string) => {
+    const nextCategory = buildCategoryName(mainCategory, nextLabel)
+    if (!currentCategory || !nextCategory) return
+
+    setBlocks(prev =>
+      prev.map(block =>
+        block.id !== blockId
+          ? block
+          : {
+              ...block,
+              items: block.items.map(item =>
+                item.category === currentCategory ? { ...item, category: nextCategory } : item
+              ),
+            }
+      )
+    )
+
+    setActiveSubCategoryByBlock(prev => ({
+      ...prev,
+      [blockId]: nextCategory,
+    }))
+
+    setSubCategoryDraftByBlock(prev => ({
+      ...prev,
+      [blockId]: getSubCategoryLabel(nextCategory, mainCategory),
+    }))
+  }
+
+  const startInlineSubCategoryEdit = (blockId: string, mainCategory: MainCategory | '', category: string) => {
+    setEditingSubCategoryByBlock(prev => ({
+      ...prev,
+      [blockId]: category,
+    }))
+    setSubCategoryDraftByBlock(prev => ({
+      ...prev,
+      [blockId]: getSubCategoryLabel(category, mainCategory),
+    }))
+  }
+
+  const stopInlineSubCategoryEdit = (blockId: string) => {
+    setEditingSubCategoryByBlock(prev => {
+      const next = { ...prev }
+      delete next[blockId]
+      return next
+    })
+  }
+
+  const commitInlineSubCategoryEdit = (blockId: string, mainCategory: MainCategory | '', category: string) => {
+    renameSubCategory(blockId, mainCategory, category, subCategoryDraftByBlock[blockId] ?? '')
+    stopInlineSubCategoryEdit(blockId)
+  }
+
+  const createSubCategory = (blockId: string, mainCategory: MainCategory | '', label: string) => {
+    const nextCategory = buildCategoryName(mainCategory, label)
+    if (!nextCategory) return
+
+    const targetBlock = blocks.find(block => block.id === blockId)
+    const alreadyExists = targetBlock?.items.some(item => item.category === nextCategory)
+
+    if (!alreadyExists) {
+      addItemToBlock(blockId, nextCategory)
+    }
+
+    setActiveSubCategoryByBlock(prev => ({
+      ...prev,
+      [blockId]: nextCategory,
+    }))
+    setSubCategoryDraftByBlock(prev => ({
+      ...prev,
+      [blockId]: getSubCategoryLabel(nextCategory, mainCategory),
+    }))
+    setNewSubCategoryByBlock(prev => ({
+      ...prev,
+      [blockId]: '',
+    }))
+  }
+
+  const buildUniqueSubCategoryName = (block: BlockInput | undefined, mainCategory: MainCategory | '', baseLabel: string) => {
+    const cleanBase = baseLabel.trim()
+    if (!cleanBase) return ''
+
+    let nextLabel = cleanBase
+    let index = 2
+    let nextCategory = buildCategoryName(mainCategory, nextLabel)
+
+    while (block?.items.some(item => item.category === nextCategory)) {
+      nextLabel = `${cleanBase} ${index}`
+      nextCategory = buildCategoryName(mainCategory, nextLabel)
+      index += 1
+    }
+
+    return nextCategory
+  }
+
+  const duplicateSubCategory = (blockId: string, mainCategory: MainCategory | '', category: string) => {
+    const block = blocks.find(item => item.id === blockId)
+    const sourceItems = block?.items.filter(item => item.category === category) || []
+    if (sourceItems.length === 0) return
+
+    const baseLabel = `${getSubCategoryLabel(category, mainCategory)} Kopya`
+    const nextCategory = buildUniqueSubCategoryName(block, mainCategory, baseLabel)
+    if (!nextCategory) return
+
+    setBlocks(prev =>
+      prev.map(currentBlock =>
+        currentBlock.id !== blockId
+          ? currentBlock
+          : {
+              ...currentBlock,
+              items: [
+                ...currentBlock.items,
+                ...sourceItems.map(item => ({
+                  ...item,
+                  id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                  category: nextCategory,
+                })),
+              ],
+            }
+      )
+    )
+
+    setActiveSubCategoryByBlock(prev => ({
+      ...prev,
+      [blockId]: nextCategory,
+    }))
+    setSubCategoryDraftByBlock(prev => ({
+      ...prev,
+      [blockId]: getSubCategoryLabel(nextCategory, mainCategory),
+    }))
+  }
+
+  const deleteSubCategory = (blockId: string, category: string) => {
+    const approved = window.confirm('Bu alt sekmedeki tum kalemler silinecek. Devam edilsin mi?')
+    if (!approved) return
+
+    setBlocks(prev =>
+      prev.map(block =>
+        block.id !== blockId
+          ? block
+          : {
+              ...block,
+              items: block.items.filter(item => item.category !== category),
+            }
+      )
+    )
+  }
+
   const saveScenario = async () => {
     const response = await fetch('/api/construction-cost-scenarios', {
       method: 'POST',
@@ -516,6 +846,8 @@ export default function ConstructionCostsPage() {
   const loadScenario = (scenario: SavedScenario) => {
     setInputs(scenario.inputs)
     setBlocks(scenario.blocks)
+    setEditingSubCategoryByBlock({})
+    setNewSubCategoryByBlock({})
     setActiveMainCategoryByBlock(
       scenario.blocks.reduce<Record<string, MainCategory>>((acc, block) => {
         acc[block.id] = getMainCategoriesForBlock(block)[0] || ''
@@ -526,6 +858,14 @@ export default function ConstructionCostsPage() {
       scenario.blocks.reduce<Record<string, string>>((acc, block) => {
         const mainCategory = getMainCategoriesForBlock(block)[0] || ''
         acc[block.id] = getSubCategoriesForBlock(block, mainCategory)[0] || ''
+        return acc
+      }, {})
+    )
+    setSubCategoryDraftByBlock(
+      scenario.blocks.reduce<Record<string, string>>((acc, block) => {
+        const mainCategory = getMainCategoriesForBlock(block)[0] || ''
+        const subCategory = getSubCategoriesForBlock(block, mainCategory)[0] || ''
+        acc[block.id] = getSubCategoryLabel(subCategory, mainCategory)
         return acc
       }, {})
     )
@@ -794,6 +1134,7 @@ export default function ConstructionCostsPage() {
                                   ...prev,
                                   [block.id]: nextSub,
                                 }))
+                                syncSubCategoryDraft(block.id, category, nextSub)
                               }
                             }
                             className={`rounded-xl px-4 py-2 text-xs font-semibold tracking-[0.08em] transition ${
@@ -824,28 +1165,180 @@ export default function ConstructionCostsPage() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                         {subCategories.map(category => (
-                          <button
-                            key={category}
-                            onClick={() =>
-                              setActiveSubCategoryByBlock(prev => ({
-                                ...prev,
-                                [block.id]: category,
-                              }))
-                            }
-                            className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                              activeSubCategory === category
-                                ? 'border-orange-300 bg-orange-50 text-orange-800'
-                                : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50'
-                            }`}
-                          >
-                            {category}
-                          </button>
+                          editingSubCategoryByBlock[block.id] === category ? (
+                            <input
+                              key={category}
+                              autoFocus
+                              value={subCategoryDraftByBlock[block.id] ?? getSubCategoryLabel(category, activeMainCategory)}
+                              onChange={e =>
+                                setSubCategoryDraftByBlock(prev => ({
+                                  ...prev,
+                                  [block.id]: e.target.value,
+                                }))
+                              }
+                              onBlur={() => commitInlineSubCategoryEdit(block.id, activeMainCategory, category)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  commitInlineSubCategoryEdit(block.id, activeMainCategory, category)
+                                }
+                                if (e.key === 'Escape') {
+                                  syncSubCategoryDraft(block.id, activeMainCategory, category)
+                                  stopInlineSubCategoryEdit(block.id)
+                                }
+                              }}
+                              className="min-w-[180px] rounded-xl border border-orange-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 outline-none ring-2 ring-orange-100"
+                            />
+                          ) : (
+                            <button
+                              key={category}
+                              onClick={() => {
+                                setActiveSubCategoryByBlock(prev => ({
+                                  ...prev,
+                                  [block.id]: category,
+                                }))
+                                syncSubCategoryDraft(block.id, activeMainCategory, category)
+                              }}
+                              onDoubleClick={() => startInlineSubCategoryEdit(block.id, activeMainCategory, category)}
+                              onContextMenu={event => {
+                                event.preventDefault()
+                                setActiveSubCategoryByBlock(prev => ({
+                                  ...prev,
+                                  [block.id]: category,
+                                }))
+                                syncSubCategoryDraft(block.id, activeMainCategory, category)
+                                setSubCategoryContextMenu({
+                                  blockId: block.id,
+                                  mainCategory: activeMainCategory,
+                                  category,
+                                  x: event.clientX,
+                                  y: event.clientY,
+                                })
+                              }}
+                              title="Cift tiklayip duzenleyin, sag tik ile menu acin"
+                              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                                activeSubCategory === category
+                                  ? getSubCategoryAccent(category).active
+                                  : getSubCategoryAccent(category).idle
+                              }`}
+                            >
+                              <span className={`h-2.5 w-2.5 rounded-full ${getSubCategoryAccent(category).dot}`}></span>
+                              <span>{category}</span>
+                            </button>
+                          )
                         ))}
                         {subCategories.length === 0 && (
                           <div className="rounded-xl border border-dashed border-stone-300 bg-white px-3 py-2 text-xs text-stone-500">
                             Bu ana kategori icin alt kategori yok.
                           </div>
                         )}
+                        </div>
+                        {subCategoryContextMenu?.blockId === block.id && (
+                          <div
+                            className="fixed z-50 min-w-[190px] rounded-2xl border border-stone-200 bg-white p-2 shadow-2xl"
+                            style={{ left: subCategoryContextMenu.x, top: subCategoryContextMenu.y }}
+                            onClick={event => event.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => {
+                                startInlineSubCategoryEdit(
+                                  subCategoryContextMenu.blockId,
+                                  subCategoryContextMenu.mainCategory,
+                                  subCategoryContextMenu.category
+                                )
+                                setSubCategoryContextMenu(null)
+                              }}
+                              className="flex w-full rounded-xl px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100"
+                            >
+                              Yeniden Adlandir
+                            </button>
+                            <button
+                              onClick={() => {
+                                duplicateSubCategory(
+                                  subCategoryContextMenu.blockId,
+                                  subCategoryContextMenu.mainCategory,
+                                  subCategoryContextMenu.category
+                                )
+                                setSubCategoryContextMenu(null)
+                              }}
+                              className="flex w-full rounded-xl px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100"
+                            >
+                              Cogalt
+                            </button>
+                            <button
+                              onClick={() => {
+                                deleteSubCategory(subCategoryContextMenu.blockId, subCategoryContextMenu.category)
+                                setSubCategoryContextMenu(null)
+                              }}
+                              className="flex w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                            >
+                              Sil
+                            </button>
+                          </div>
+                        )}
+                        {activeSubCategory && (
+                          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-3">
+                            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
+                              Alt Kategori Adi
+                            </div>
+                            <div className="flex flex-col gap-2 md:flex-row">
+                              <input
+                                value={subCategoryDraftByBlock[block.id] ?? getSubCategoryLabel(activeSubCategory, activeMainCategory)}
+                                onChange={e =>
+                                  setSubCategoryDraftByBlock(prev => ({
+                                    ...prev,
+                                    [block.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Alt kategori adini girin"
+                                className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                              />
+                              <button
+                                onClick={() =>
+                                  renameSubCategory(
+                                    block.id,
+                                    activeMainCategory,
+                                    activeSubCategory,
+                                    subCategoryDraftByBlock[block.id] ?? ''
+                                  )
+                                }
+                                className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+                              >
+                                Alt Sekme Adini Guncelle
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="mt-4 rounded-2xl border border-dashed border-stone-300 bg-white p-3">
+                          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
+                            Yeni Alt Sekme
+                          </div>
+                          <div className="flex flex-col gap-2 md:flex-row">
+                            <input
+                              value={newSubCategoryByBlock[block.id] || ''}
+                              onChange={e =>
+                                setNewSubCategoryByBlock(prev => ({
+                                  ...prev,
+                                  [block.id]: e.target.value,
+                                }))
+                              }
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  createSubCategory(block.id, activeMainCategory, newSubCategoryByBlock[block.id] || '')
+                                }
+                              }}
+                              placeholder="Ornek: Kaba Kalip, Ic Kapi, Aydinlatma"
+                              className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                            />
+                            <button
+                              onClick={() => createSubCategory(block.id, activeMainCategory, newSubCategoryByBlock[block.id] || '')}
+                              className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
+                            >
+                              Yeni Alt Sekme Ac
+                            </button>
+                          </div>
+                          <div className="mt-2 text-xs text-stone-500">
+                            Son kalem silinirse o alt sekme otomatik kaybolur.
+                          </div>
                         </div>
                       </div>
                       </div>

@@ -1385,7 +1385,7 @@ export default function ConstructionCostsPage() {
                       </div>
                       </div>
 
-                      <div className="mt-4 max-h-[70vh] overflow-auto rounded-2xl border border-stone-200">
+                      <div className="mt-4 overflow-x-auto rounded-2xl border border-stone-200 bg-white">
                         <table className="min-w-full text-sm">
                           <thead className="sticky top-0 z-10 bg-white shadow-sm">
                             <tr className="border-b border-stone-200 text-left text-stone-500">

@@ -1,10 +1,16 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || !anonKey) {
+    throw new Error('Supabase environment variables are missing')
+  }
+
+  return createClient(url, anonKey)
+}
 
 export interface SalesRecord {
   apartmentId: string
@@ -18,7 +24,6 @@ function normalizeSaleDate(input: string) {
   const parsed = new Date(input)
   if (!Number.isNaN(parsed.getTime())) return parsed.toISOString()
 
-  // Fallback for legacy tr-TR date strings: dd.MM.yyyy HH:mm:ss
   const match = String(input || '').match(/(\d{2})\.(\d{2})\.(\d{4})/)
   if (match) {
     const day = parseInt(match[1], 10)
@@ -33,6 +38,7 @@ function normalizeSaleDate(input: string) {
 
 export async function GET() {
   try {
+    const supabase = getSupabase()
     const { data, error } = await supabase
       .from('sales')
       .select('*')
@@ -57,12 +63,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const body = await request.json()
     const records: SalesRecord[] = Array.isArray(body)
       ? body
       : Array.isArray(body.records)
-      ? body.records
-      : [body]
+        ? body.records
+        : [body]
 
     for (const record of records) {
       const safeDate = normalizeSaleDate(record.date)
@@ -124,6 +131,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = getSupabase()
     const body = await request.json()
     const apartmentId = body?.apartmentId
     if (!apartmentId) {

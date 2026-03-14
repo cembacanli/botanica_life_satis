@@ -250,6 +250,22 @@ export default function Dashboard() {
             </svg>
             Maliyet
           </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => router.push('/construction-costs')}
+              className="ml-4 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6M10 9h4"
+                />
+              </svg>
+              Insaat Hesabi
+            </button>
+          )}
           <button
             onClick={() => router.push('/subcontractors')}
             className="ml-4 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"

@@ -64,8 +64,6 @@ type BlockMetrics = {
   categoryTotals: Record<string, number>
 }
 
-const STORAGE_KEY = 'construction-cost-scenarios-v2'
-
 const defaultScenarioInputs: ScenarioInputs = {
   scenarioName: 'Yeni Senaryo',
   landArea: 2500,
@@ -253,6 +251,7 @@ export default function ConstructionCostsPage() {
   const [inputs, setInputs] = useState<ScenarioInputs>(defaultScenarioInputs)
   const [blocks, setBlocks] = useState<BlockInput[]>([createBlock(0)])
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([])
+  const [scenariosLoading, setScenariosLoading] = useState(false)
   const [activeMainCategoryByBlock, setActiveMainCategoryByBlock] = useState<Record<string, MainCategory>>({})
   const [activeSubCategoryByBlock, setActiveSubCategoryByBlock] = useState<Record<string, string>>({})
 
@@ -270,18 +269,21 @@ export default function ConstructionCostsPage() {
   }, [isAuthenticated, loading, router, user])
 
   useEffect(() => {
-    if (!mounted) return
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as SavedScenario[]
-      if (Array.isArray(parsed)) {
-        setSavedScenarios(parsed)
+    if (!mounted || !isAuthenticated || user?.role !== 'admin') return
+    const loadScenarios = async () => {
+      setScenariosLoading(true)
+      try {
+        const response = await fetch('/api/construction-cost-scenarios')
+        const data = await response.json()
+        setSavedScenarios(Array.isArray(data) ? data : [])
+      } catch {
+        setSavedScenarios([])
+      } finally {
+        setScenariosLoading(false)
       }
-    } catch {
-      setSavedScenarios([])
     }
-  }, [mounted])
+    loadScenarios()
+  }, [mounted, isAuthenticated, user])
 
   const blockMetrics = useMemo(() => blocks.map(createMetricsForBlock), [blocks])
 
@@ -498,16 +500,17 @@ export default function ConstructionCostsPage() {
     )
   }
 
-  const saveScenario = () => {
-    const nextScenario: SavedScenario = {
-      id: `${Date.now()}`,
-      savedAt: new Date().toISOString(),
-      inputs,
-      blocks,
+  const saveScenario = async () => {
+    const response = await fetch('/api/construction-cost-scenarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs, blocks }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data?.error || 'Senaryo kaydedilemedi.')
     }
-    const next = [nextScenario, ...savedScenarios].slice(0, 10)
-    setSavedScenarios(next)
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    setSavedScenarios(prev => [data, ...prev].slice(0, 10))
   }
 
   const loadScenario = (scenario: SavedScenario) => {
@@ -528,15 +531,20 @@ export default function ConstructionCostsPage() {
     )
   }
 
-  const deleteScenario = (scenarioId: string) => {
+  const deleteScenario = async (scenarioId: string) => {
     const approved = window.confirm('Bu senaryoyu silmek istiyor musunuz?')
     if (!approved) return
-
-    setSavedScenarios(prev => {
-      const next = prev.filter(scenario => scenario.id !== scenarioId)
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      return next
+    const response = await fetch('/api/construction-cost-scenarios', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: scenarioId }),
     })
+    const data = await response.json()
+    if (!response.ok) {
+      alert(data?.error || 'Senaryo silinemedi.')
+      return
+    }
+    setSavedScenarios(prev => prev.filter(scenario => scenario.id !== scenarioId))
   }
 
   if (!mounted || loading) {
@@ -567,7 +575,14 @@ export default function ConstructionCostsPage() {
               Ana Sayfa
             </button>
             <button
-              onClick={saveScenario}
+              onClick={async () => {
+                try {
+                  await saveScenario()
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : 'Senaryo kaydedilemedi.'
+                  alert(message)
+                }
+              }}
               className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
             >
               Senaryoyu Kaydet
@@ -1068,9 +1083,14 @@ export default function ConstructionCostsPage() {
             <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-stone-900">Kayitli Senaryolar</h2>
-                <div className="text-sm text-stone-500">Tarayici uzerinde saklanir</div>
+                <div className="text-sm text-stone-500">Supabase uzerinde saklanir</div>
               </div>
               <div className="mt-4 space-y-3">
+                {scenariosLoading && (
+                  <div className="rounded-2xl bg-stone-50 p-4 text-sm text-stone-500">
+                    Senaryolar yukleniyor...
+                  </div>
+                )}
                 {savedScenarios.length === 0 && (
                   <div className="rounded-2xl bg-stone-50 p-4 text-sm text-stone-500">
                     Henuz kayitli senaryo yok.

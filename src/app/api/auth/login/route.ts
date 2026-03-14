@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { AUTH_COOKIE_NAME, encodeSessionUser } from '@/lib/auth-session'
 
 const USER_TABLE = 'app_users'
 
@@ -66,7 +67,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'invalid credentials' }, { status: 401 })
     }
 
-    return NextResponse.json({ user: data })
+    const user = {
+      id: data.id,
+      username: data.username,
+      role: data.role,
+      createdAt: data.created_at,
+    }
+
+    const response = NextResponse.json({ user })
+    response.cookies.set({
+      name: AUTH_COOKIE_NAME,
+      value: encodeSessionUser(user),
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    })
+
+    return response
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Login failed'
     return NextResponse.json({ error: message }, { status: 500 })

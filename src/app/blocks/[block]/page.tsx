@@ -19,8 +19,6 @@ interface SaleCustomerMeta {
   customerIdentityNo?: string
 }
 
-const SALE_CUSTOMER_META_STORAGE_KEY = 'sale_customer_meta_v1'
-
 export default function BlockPage() {
   const params = useParams()
   const router = useRouter()
@@ -43,6 +41,7 @@ export default function BlockPage() {
       try {
         const records = await fetchSalesRecords()
         await fetchSaleDetails()
+        await fetchSaleCustomerMeta()
         await fetchApartments(records)
       } finally {
         setLoading(false)
@@ -51,19 +50,6 @@ export default function BlockPage() {
 
     loadAll()
   }, [blockName])
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SALE_CUSTOMER_META_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object') {
-        setSaleCustomerMetaMap(parsed)
-      }
-    } catch (error) {
-      console.error('Sale customer meta load error:', error)
-    }
-  }, [])
 
   const fetchSalesRecords = async () => {
     try {
@@ -114,39 +100,53 @@ export default function BlockPage() {
     }
   }
 
+  const fetchSaleCustomerMeta = async () => {
+    try {
+      const response = await fetch('/api/sale-customer-meta')
+      const data = await response.json()
+      setSaleCustomerMetaMap(data && typeof data === 'object' ? data : {})
+      return data
+    } catch (error) {
+      console.error('Error fetching sale customer meta:', error)
+      setSaleCustomerMetaMap({})
+      return {}
+    }
+  }
+
   const upsertSaleCustomerMeta = useCallback((records: SaleData[]) => {
-    setSaleCustomerMetaMap(prev => {
-      const next = { ...prev }
-      records.forEach(record => {
-        const prevMeta = next[record.apartmentId] || {}
-        next[record.apartmentId] = {
-          customerAddress: record.customerAddress ?? prevMeta.customerAddress,
-          customerIdentityNo: record.customerIdentityNo ?? prevMeta.customerIdentityNo,
-        }
-      })
-      try {
-        localStorage.setItem(SALE_CUSTOMER_META_STORAGE_KEY, JSON.stringify(next))
-      } catch (error) {
-        console.error('Sale customer meta save error:', error)
-      }
-      return next
+    const payload = records.map(record => ({
+      apartmentId: record.apartmentId,
+      customerAddress: record.customerAddress || '',
+      customerIdentityNo: record.customerIdentityNo || '',
+    }))
+
+    fetch('/api/sale-customer-meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     })
+      .then(r => r.json())
+      .then(data => setSaleCustomerMetaMap(data && typeof data === 'object' ? data : {}))
+      .catch(error => console.error('Sale customer meta save error:', error))
   }, [])
 
   const removeSaleCustomerMeta = useCallback((apartmentIds: string[]) => {
     if (!apartmentIds.length) return
-    setSaleCustomerMetaMap(prev => {
-      const next = { ...prev }
-      apartmentIds.forEach(id => {
-        delete next[id]
-      })
-      try {
-        localStorage.setItem(SALE_CUSTOMER_META_STORAGE_KEY, JSON.stringify(next))
-      } catch (error) {
-        console.error('Sale customer meta remove error:', error)
-      }
-      return next
+    fetch('/api/sale-customer-meta', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apartmentIds }),
     })
+      .then(() => {
+        setSaleCustomerMetaMap(prev => {
+          const next = { ...prev }
+          apartmentIds.forEach(id => {
+            delete next[id]
+          })
+          return next
+        })
+      })
+      .catch(error => console.error('Sale customer meta remove error:', error))
   }, [])
 
   useEffect(() => {

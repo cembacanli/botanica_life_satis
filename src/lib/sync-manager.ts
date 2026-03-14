@@ -1,6 +1,6 @@
 /**
- * Gerçek zamanlı senkronizasyon yöneticisi
- * Farklı tarayıcı sekmeleri arasında veri senkronizasyonu sağlar
+ * Gercek zamanli senkronizasyon yoneticisi
+ * Tarayici ici event bazli degisiklik bildirimi saglar.
  */
 
 type SyncCallback = () => void
@@ -8,7 +8,6 @@ type SyncEvent = 'salesRecords' | 'saleDetails'
 
 const syncListeners: Map<SyncEvent, Set<SyncCallback>> = new Map()
 
-// Listener'ları kaydet
 export function addSyncListener(event: SyncEvent, callback: SyncCallback) {
   if (!syncListeners.has(event)) {
     syncListeners.set(event, new Set())
@@ -20,7 +19,6 @@ export function addSyncListener(event: SyncEvent, callback: SyncCallback) {
   }
 }
 
-// Listener'ları çağır
 function notifyListeners(event: SyncEvent) {
   const listeners = syncListeners.get(event)
   if (listeners) {
@@ -28,17 +26,7 @@ function notifyListeners(event: SyncEvent) {
   }
 }
 
-// localStorage değişikliklerini dinle
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (event.key === 'salesRecords') {
-      notifyListeners('salesRecords')
-    } else if (event.key?.startsWith('saleDetails_')) {
-      notifyListeners('saleDetails')
-    }
-  })
-
-  // Aynı sekmede olan değişiklikleri dinlemek için custom events kullan
   window.addEventListener('salesRecordsChanged', () => {
     notifyListeners('salesRecords')
   })
@@ -48,25 +36,20 @@ if (typeof window !== 'undefined') {
   })
 }
 
-// localStorage'a veri yaz ve event fırlat
 export function setSalesRecords(records: any[]) {
-  localStorage.setItem('salesRecords', JSON.stringify(records))
+  void records
   window.dispatchEvent(new CustomEvent('salesRecordsChanged'))
 }
 
 export function setSaleDetails(apartmentId: string, details: any) {
-  localStorage.setItem(`saleDetails_${apartmentId}`, JSON.stringify(details))
+  void apartmentId
+  void details
   window.dispatchEvent(new CustomEvent('saleDetailsChanged'))
 }
 
-// Poll-based senkronizasyon (belirlenen aralıklarla kontrol et)
 export function startPolling(event: SyncEvent, interval: number = 1000) {
   const pollData = () => {
-    if (event === 'salesRecords') {
-      notifyListeners('salesRecords')
-    } else if (event === 'saleDetails') {
-      notifyListeners('saleDetails')
-    }
+    notifyListeners(event)
   }
 
   const intervalId = setInterval(pollData, interval)

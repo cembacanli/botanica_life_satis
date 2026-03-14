@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 export interface User {
   id: string
   username: string
-  password: string
+  password?: string
   role: 'admin' | 'user'
   createdAt: string
 }
@@ -13,8 +13,6 @@ export interface AuthState {
   isAuthenticated: boolean
 }
 
-const CURRENT_USER_KEY = 'current_user'
-
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -22,29 +20,32 @@ export function useAuth() {
   })
   const [loading, setLoading] = useState(true)
 
-  // Başlangıçta kullanıcıları ve oturumu yükle
   useEffect(() => {
-    const currentUser = getStoredCurrentUser()
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          setAuthState({ user: null, isAuthenticated: false })
+          return
+        }
 
-    if (currentUser) {
-      setAuthState({
-        user: currentUser,
-        isAuthenticated: true,
-      })
+        const data = await response.json()
+        const user = data?.user as User | undefined
+        if (user) {
+          setAuthState({ user, isAuthenticated: true })
+        } else {
+          setAuthState({ user: null, isAuthenticated: false })
+        }
+      } catch (error) {
+        console.error('Auth load error:', error)
+        setAuthState({ user: null, isAuthenticated: false })
+      } finally {
+        setLoading(false)
+      }
     }
-    setLoading(false)
+
+    loadCurrentUser()
   }, [])
-
-  const getStoredCurrentUser = (): User | null => {
-    if (typeof window === 'undefined') return null
-    const stored = localStorage.getItem(CURRENT_USER_KEY)
-    if (!stored) return null
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return null
-    }
-  }
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
@@ -60,13 +61,8 @@ export function useAuth() {
 
       const data = await response.json()
       const user = data?.user as User | undefined
-
       if (user) {
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user))
-        setAuthState({
-          user,
-          isAuthenticated: true,
-        })
+        setAuthState({ user, isAuthenticated: true })
         return true
       }
     } catch (error) {
@@ -77,11 +73,8 @@ export function useAuth() {
   }
 
   const logout = () => {
-    localStorage.removeItem(CURRENT_USER_KEY)
-    setAuthState({
-      user: null,
-      isAuthenticated: false,
-    })
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    setAuthState({ user: null, isAuthenticated: false })
   }
 
   const addUser = async (

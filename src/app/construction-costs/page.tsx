@@ -1114,7 +1114,7 @@ export default function ConstructionCostsPage() {
                         </div>
                       </div>
 
-                      <div className="sticky top-4 z-20 mt-5 space-y-3 rounded-2xl border border-stone-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+                      <div className="sticky top-24 z-20 mt-5 space-y-3 rounded-2xl border border-stone-200 bg-white/95 p-3 shadow-sm backdrop-blur">
                         <div className="flex items-center justify-between gap-4">
                         <div>
                           <h4 className="text-base font-semibold text-stone-900">{block.name} maliyet kalemleri</h4>
@@ -1385,17 +1385,17 @@ export default function ConstructionCostsPage() {
                       </div>
                       </div>
 
-                      <div className="mt-4 overflow-x-auto">
+                      <div className="mt-4 max-h-[70vh] overflow-auto rounded-2xl border border-stone-200">
                         <table className="min-w-full text-sm">
-                          <thead>
+                          <thead className="sticky top-0 z-10 bg-white shadow-sm">
                             <tr className="border-b border-stone-200 text-left text-stone-500">
-                              <th className="pb-3">Is Kalemi</th>
-                              <th className="pb-3">Kategori</th>
-                              <th className="pb-3">Birim</th>
-                              <th className="pb-3">Metraj</th>
-                              <th className="pb-3">Birim Fiyat</th>
-                              <th className="pb-3">Tutar</th>
-                              <th className="pb-3"></th>
+                              <th className="px-3 py-3">Is Kalemi</th>
+                              <th className="px-3 py-3">Kategori</th>
+                              <th className="px-3 py-3">Birim</th>
+                              <th className="px-3 py-3">Metraj</th>
+                              <th className="px-3 py-3">Birim Fiyat</th>
+                              <th className="px-3 py-3">Tutar</th>
+                              <th className="px-3 py-3"></th>
                             </tr>
                           </thead>
                           <tbody>

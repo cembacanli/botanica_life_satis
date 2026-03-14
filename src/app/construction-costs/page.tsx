@@ -316,6 +316,7 @@ export default function ConstructionCostsPage() {
   const [inputs, setInputs] = useState<ScenarioInputs>(defaultScenarioInputs)
   const [blocks, setBlocks] = useState<BlockInput[]>([createBlock(0)])
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([])
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null)
   const [scenariosLoading, setScenariosLoading] = useState(false)
   const [activeMainCategoryByBlock, setActiveMainCategoryByBlock] = useState<Record<string, MainCategory>>({})
   const [activeSubCategoryByBlock, setActiveSubCategoryByBlock] = useState<Record<string, string>>({})
@@ -841,9 +842,31 @@ export default function ConstructionCostsPage() {
       throw new Error(data?.error || 'Senaryo kaydedilemedi.')
     }
     setSavedScenarios(prev => [data, ...prev].slice(0, 10))
+    setActiveScenarioId(data.id)
+  }
+
+  const updateScenario = async () => {
+    if (!activeScenarioId) {
+      throw new Error('Guncellenecek kayitli senaryo secili degil.')
+    }
+
+    const response = await fetch('/api/construction-cost-scenarios', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: activeScenarioId, inputs, blocks }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data?.error || 'Senaryo guncellenemedi.')
+    }
+
+    setSavedScenarios(prev =>
+      prev.map(scenario => (scenario.id === data.id ? data : scenario))
+    )
   }
 
   const loadScenario = (scenario: SavedScenario) => {
+    setActiveScenarioId(scenario.id)
     setInputs(scenario.inputs)
     setBlocks(scenario.blocks)
     setEditingSubCategoryByBlock({})
@@ -885,6 +908,9 @@ export default function ConstructionCostsPage() {
       return
     }
     setSavedScenarios(prev => prev.filter(scenario => scenario.id !== scenarioId))
+    if (activeScenarioId === scenarioId) {
+      setActiveScenarioId(null)
+    }
   }
 
   if (!mounted || loading) {
@@ -908,6 +934,22 @@ export default function ConstructionCostsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {activeScenarioId && (
+              <button
+                onClick={async () => {
+                  try {
+                    await updateScenario()
+                    alert('Mevcut senaryo guncellendi.')
+                  } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Senaryo guncellenemedi.'
+                    alert(message)
+                  }
+                }}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+              >
+                Mevcut Senaryoyu Guncelle
+              </button>
+            )}
             <button
               onClick={() => router.push('/')}
               className="rounded-xl bg-white/10 px-4 py-2 text-sm hover:bg-white/20"
@@ -1596,13 +1638,24 @@ export default function ConstructionCostsPage() {
                   return (
                     <div
                       key={scenario.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200 px-4 py-3 hover:border-orange-400 hover:bg-orange-50"
+                      className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
+                        activeScenarioId === scenario.id
+                          ? 'border-emerald-400 bg-emerald-50'
+                          : 'border-stone-200 hover:border-orange-400 hover:bg-orange-50'
+                      }`}
                     >
                       <button
                         onClick={() => loadScenario(scenario)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <div className="font-medium text-stone-900">{scenario.inputs.scenarioName}</div>
+                        <div className="flex items-center gap-2 font-medium text-stone-900">
+                          <span>{scenario.inputs.scenarioName}</span>
+                          {activeScenarioId === scenario.id && (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                              Yuklu
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-stone-500">
                           {new Date(scenario.savedAt).toLocaleString('tr-TR')} - {scenario.blocks.length} blok
                         </div>

@@ -84,3 +84,37 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = (await request.json()) as ScenarioPayload
+    const id = String(body?.id || '').trim()
+    const inputs = body?.inputs || {}
+    const blocks = Array.isArray(body?.blocks) ? body.blocks : []
+    const scenarioName = String((inputs as any)?.scenarioName || '').trim()
+
+    if (!id || !scenarioName || blocks.length === 0) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({
+        scenario_name: scenarioName,
+        inputs,
+        blocks,
+      })
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json(mapRow(data))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Construction scenario update failed'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}

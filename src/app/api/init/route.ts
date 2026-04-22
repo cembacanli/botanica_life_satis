@@ -1,17 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { generateApartments } from '@/lib/data-generator'
+import { NextResponse } from 'next/server'
+import { getApartmentStats } from '@/lib/apartments-store'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const apartments = generateApartments()
+    const stats = await getApartmentStats()
 
     return NextResponse.json({
-      message: 'Database initialized successfully',
-      totalApartments: apartments.length,
-      blocks: {
-        'A-B': '60 daire (2+1, 90m²)',
-        'C-D': '120 daire (1+1, 45m²)',
-      },
+      message: 'Supabase apartments ready',
+      source: 'supabase',
+      totalApartments: stats.totalApartments,
+      blocks: stats.blocks,
     })
   } catch (error) {
     console.error('Initialization error:', error)

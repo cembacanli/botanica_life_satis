@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from(USER_TABLE)
-      .select('*')
+      .select('id, username, role, created_at')
       .eq('id', sessionUser.id)
       .limit(1)
       .maybeSingle()

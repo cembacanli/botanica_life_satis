@@ -127,6 +127,29 @@ export default function InstallmentsPage() {
 
     return map
   }
+  const getInstallmentDueDate = (details: any, index: number) => {
+    const scheduleDates = details?.customScheduleDates || details?.installmentScheduleDates || []
+    const dateValue = scheduleDates[index]
+    const startDate = details?.startDate ? new Date(details.startDate) : new Date()
+    const dueDate = dateValue ? new Date(dateValue) : new Date(startDate)
+    if (!dateValue) {
+      dueDate.setMonth(dueDate.getMonth() + index)
+    }
+    dueDate.setHours(0, 0, 0, 0)
+    return dueDate
+  }
+  const getMonthKey = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}`
+  }
+  const formatMonthLabel = (monthKey: string) => {
+    const [year, month] = monthKey.split('-').map(Number)
+    return new Date(year, (month || 1) - 1, 1).toLocaleDateString('tr-TR', {
+      month: 'long',
+      year: 'numeric',
+    })
+  }
   const [apartments, setApartments] = useState<Apartment[]>([])
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
   const [saleDetailsMap, setSaleDetailsMap] = useState<Record<string, any>>({})
@@ -489,6 +512,7 @@ export default function InstallmentsPage() {
       const paidFromInstallments = (details?.payments || [])
         .filter((p: any) => !isExtraPaymentLabel(p.label))
         .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+      const adjustedSchedule = buildAdjustedSchedule(details, scheduleAmounts, paidFromInstallments)
       const installmentsPaid = getInstallmentsPaidCount(scheduleAmounts, paidFromInstallments)
       const scheduleDates = details?.customScheduleDates || details?.installmentScheduleDates || []
       const startDate = details?.startDate ? new Date(details.startDate) : new Date()
@@ -508,7 +532,7 @@ export default function InstallmentsPage() {
 
           if (i >= installmentsPaid) {
             if (!nextDueDate) nextDueDate = dueDate
-            if (dueDate < today) overdueAmount += scheduleAmounts[i] || details.monthlyPayment || 0
+            if (dueDate < today) overdueAmount += adjustedSchedule[i] || details.monthlyPayment || 0
           }
         }
 
@@ -554,6 +578,54 @@ export default function InstallmentsPage() {
     overdueCount: filteredSoldRecords.filter(row => row.dueStatus === 'overdue').length,
   }
 
+  const monthlyProjection = filteredSoldRecords.reduce((acc, row) => {
+    const details = row.details
+    if (!details?.installmentMonths || details.installmentMonths <= 0) return acc
+
+    const paidFromInstallments = (details.payments || [])
+      .filter((p: any) => !isExtraPaymentLabel(p.label))
+      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
+
+    const baseSchedule = buildScheduleAmounts(details)
+    const adjustedSchedule = buildAdjustedSchedule(details, baseSchedule, paidFromInstallments)
+    const installmentsPaid = getInstallmentsPaidCount(baseSchedule, paidFromInstallments)
+
+    for (let i = installmentsPaid; i < details.installmentMonths; i++) {
+      const amount = adjustedSchedule[i] || 0
+      if (amount <= 0) continue
+
+      const dueDate = getInstallmentDueDate(details, i)
+      const monthKey = getMonthKey(dueDate)
+
+      if (!acc[monthKey]) {
+        acc[monthKey] = {
+          monthKey,
+          label: formatMonthLabel(monthKey),
+          amount: 0,
+          count: 0,
+          overdueAmount: 0,
+        }
+      }
+
+      acc[monthKey].amount += amount
+      acc[monthKey].count += 1
+      if (dueDate < new Date(new Date().setHours(0, 0, 0, 0))) {
+        acc[monthKey].overdueAmount += amount
+      }
+    }
+
+    return acc
+  }, {} as Record<string, { monthKey: string; label: string; amount: number; count: number; overdueAmount: number }>)
+
+  const monthlyProjectionRows = Object.values(monthlyProjection).sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+  const thisMonthKey = getMonthKey(new Date())
+  const nextMonthDate = new Date()
+  nextMonthDate.setMonth(nextMonthDate.getMonth() + 1)
+  const nextMonthKey = getMonthKey(nextMonthDate)
+  const thisMonthProjection = monthlyProjection[thisMonthKey]?.amount || 0
+  const nextMonthProjection = monthlyProjection[nextMonthKey]?.amount || 0
+  const totalProjectedCollections = monthlyProjectionRows.reduce((sum, row) => sum + row.amount, 0)
+
   return (
     <div className="min-h-screen p-8 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
       <div className="max-w-7xl mx-auto">
@@ -592,6 +664,66 @@ export default function InstallmentsPage() {
             <div className="text-xs text-gray-500">Gecikmeli Dosya</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{summary.overdueCount}</div>
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-5 border border-white/10">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <div>
+              <div className="text-lg font-bold text-gray-900">Aylık Tahsilat Projeksiyonu</div>
+              <div className="text-sm text-gray-500">Filtreye giren aktif taksitlerden hangi ay ne kadar tahsilat beklendiği</div>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <div className="px-4 py-2 bg-emerald-50 rounded-lg">
+                <div className="text-xs text-emerald-700">Bu Ay</div>
+                <div className="font-bold text-emerald-600">
+                  {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(thisMonthProjection)}
+                </div>
+              </div>
+              <div className="px-4 py-2 bg-blue-50 rounded-lg">
+                <div className="text-xs text-blue-700">Gelecek Ay</div>
+                <div className="font-bold text-blue-600">
+                  {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(nextMonthProjection)}
+                </div>
+              </div>
+              <div className="px-4 py-2 bg-purple-50 rounded-lg">
+                <div className="text-xs text-purple-700">Toplam Beklenen</div>
+                <div className="font-bold text-purple-600">
+                  {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(totalProjectedCollections)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {monthlyProjectionRows.length === 0 ? (
+            <div className="text-sm text-gray-500">Projeksiyon için aktif taksit bulunamadı.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="py-2 pr-4">Ay</th>
+                    <th className="py-2 pr-4">Beklenen Tutar</th>
+                    <th className="py-2 pr-4">Taksit Adedi</th>
+                    <th className="py-2">Geciken Kısım</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyProjectionRows.map(row => (
+                    <tr key={row.monthKey} className="border-b last:border-b-0">
+                      <td className="py-3 pr-4 font-medium text-gray-800">{row.label}</td>
+                      <td className="py-3 pr-4 font-bold text-emerald-600">
+                        {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(row.amount)}
+                      </td>
+                      <td className="py-3 pr-4 text-gray-700">{row.count}</td>
+                      <td className={`py-3 font-medium ${row.overdueAmount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:0}).format(row.overdueAmount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl p-4 flex gap-3 items-center mb-2 flex-wrap">
@@ -633,6 +765,18 @@ export default function InstallmentsPage() {
           <div className="p-4 bg-yellow-50 rounded">Filtreye uygun aktif taksit kaydı bulunamadı.</div>
         )}
 
+        {paymentModalOpen && pendingPayment && (
+          <PaymentModal
+            isOpen={paymentModalOpen}
+            onClose={() => setPaymentModalOpen(false)}
+            onConfirm={(amt, print) => confirmPayment(amt, print)}
+            apartment={apartments.find(a => a.id === pendingPayment.apartmentId)}
+            details={getSaleDetails(pendingPayment.apartmentId)}
+            amount={pendingPayment.amount}
+            label={pendingPayment.label}
+          />
+        )}
+
         {filteredSoldRecords.map((row, idx) => {
           const rec = row.rec
           const apt = row.apt
@@ -644,17 +788,6 @@ export default function InstallmentsPage() {
             <div key={idx} className="p-4 bg-white rounded shadow">
               <div className="flex justify-between items-start">
                 <div>
-                {paymentModalOpen && pendingPayment && (
-                  <PaymentModal
-                    isOpen={paymentModalOpen}
-                    onClose={() => setPaymentModalOpen(false)}
-                    onConfirm={(amt, print) => confirmPayment(amt, print)}
-                    apartment={apartments.find(a => a.id === pendingPayment.apartmentId)}
-                    details={getSaleDetails(pendingPayment.apartmentId)}
-                    amount={pendingPayment.amount}
-                    label={pendingPayment.label}
-                  />
-                )}
                   <div className="text-sm text-gray-600">Blok / Daire</div>
                   <div className="font-bold text-lg">{apt?.block} - {apt?.number}</div>
                   <div className="text-sm text-gray-600">Müşteri: {rec.customerName} ({rec.customerPhone})</div>

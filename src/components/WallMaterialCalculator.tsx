@@ -883,56 +883,90 @@ export default function WallMaterialCalculator({ username = '' }: { username?: s
           </button>
         </div>
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+          Bu listede her satır bir duvar malzemesidir. Sırasıyla <strong>kod</strong>, <strong>malzeme adı</strong>, <strong>boy</strong>, <strong>yükseklik</strong>, <strong>kalınlık</strong> ve <strong>birim fiyat</strong> girin.
+        </div>
+
+        <div className="mt-5 hidden rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 lg:grid lg:grid-cols-[1.15fr_1.35fr_0.8fr_0.8fr_0.8fr_0.9fr_auto] lg:gap-3">
+          <div>Malzeme Kodu</div>
+          <div>Malzeme Adı</div>
+          <div>Boy (cm)</div>
+          <div>Yükseklik (cm)</div>
+          <div>Kalınlık (cm)</div>
+          <div>Birim Fiyat</div>
+          <div className="text-center">İşlem</div>
+        </div>
+
+        <div className="mt-3 space-y-3">
           {materials.map(material => (
             <div key={material.id} className="rounded-2xl border border-stone-200 p-4">
-              <div className="grid gap-3 lg:grid-cols-[1.2fr_1.3fr_0.8fr_0.8fr_0.8fr_0.9fr_auto]">
-                <input
-                  value={material.code}
-                  onChange={event => updateMaterial(material.id, 'code', event.target.value)}
-                  className="rounded-2xl border border-stone-300 px-4 py-3"
-                  placeholder="Malzeme Kodu"
-                />
-                <input
-                  value={material.name}
-                  onChange={event => updateMaterial(material.id, 'name', event.target.value)}
-                  className="rounded-2xl border border-stone-300 px-4 py-3"
-                  placeholder="Malzeme Adı"
-                />
-                <input
-                  type="number"
-                  value={material.length}
-                  onChange={event => updateMaterial(material.id, 'length', Number(event.target.value || 0))}
-                  className="rounded-2xl border border-stone-300 px-4 py-3"
-                  placeholder="Boy"
-                />
-                <input
-                  type="number"
-                  value={material.height}
-                  onChange={event => updateMaterial(material.id, 'height', Number(event.target.value || 0))}
-                  className="rounded-2xl border border-stone-300 px-4 py-3"
-                  placeholder="Yükseklik"
-                />
-                <input
-                  type="number"
-                  value={material.thickness}
-                  onChange={event => updateMaterial(material.id, 'thickness', Number(event.target.value || 0))}
-                  className="rounded-2xl border border-stone-300 px-4 py-3"
-                  placeholder="Kalınlık"
-                />
-                <input
-                  type="number"
-                  value={material.unitPrice}
-                  onChange={event => updateMaterial(material.id, 'unitPrice', Number(event.target.value || 0))}
-                  className="rounded-2xl border border-stone-300 px-4 py-3"
-                  placeholder="Birim Fiyat"
-                />
-                <button
-                  onClick={() => removeMaterial(material.id)}
-                  className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50"
-                >
-                  Sil
-                </button>
+              <div className="grid gap-3 lg:grid-cols-[1.15fr_1.35fr_0.8fr_0.8fr_0.8fr_0.9fr_auto]">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500 lg:hidden">Malzeme Kodu</span>
+                  <input
+                    value={material.code}
+                    onChange={event => updateMaterial(material.id, 'code', event.target.value)}
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-3"
+                    placeholder="Malzeme Kodu"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500 lg:hidden">Malzeme Adı</span>
+                  <input
+                    value={material.name}
+                    onChange={event => updateMaterial(material.id, 'name', event.target.value)}
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-3"
+                    placeholder="Malzeme Adı"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500 lg:hidden">Boy (cm)</span>
+                  <input
+                    type="number"
+                    value={material.length}
+                    onChange={event => updateMaterial(material.id, 'length', Number(event.target.value || 0))}
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-3"
+                    placeholder="Boy"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500 lg:hidden">Yükseklik (cm)</span>
+                  <input
+                    type="number"
+                    value={material.height}
+                    onChange={event => updateMaterial(material.id, 'height', Number(event.target.value || 0))}
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-3"
+                    placeholder="Yükseklik"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500 lg:hidden">Kalınlık (cm)</span>
+                  <input
+                    type="number"
+                    value={material.thickness}
+                    onChange={event => updateMaterial(material.id, 'thickness', Number(event.target.value || 0))}
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-3"
+                    placeholder="Kalınlık"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500 lg:hidden">Birim Fiyat</span>
+                  <input
+                    type="number"
+                    value={material.unitPrice}
+                    onChange={event => updateMaterial(material.id, 'unitPrice', Number(event.target.value || 0))}
+                    className="w-full rounded-2xl border border-stone-300 px-4 py-3"
+                    placeholder="Birim Fiyat"
+                  />
+                </label>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => removeMaterial(material.id)}
+                    className="w-full rounded-2xl border border-red-200 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 lg:w-auto"
+                  >
+                    Sil
+                  </button>
+                </div>
               </div>
             </div>
           ))}

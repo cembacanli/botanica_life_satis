@@ -279,7 +279,7 @@ export default function Dashboard() {
                   d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
                 />
               </svg>
-              1. Malzeme Alım Modülü
+              Malzeme Alım Modülü
             </button>
           )}
           <button

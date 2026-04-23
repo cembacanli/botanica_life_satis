@@ -266,6 +266,22 @@ export default function Dashboard() {
               Insaat Hesabi
             </button>
           )}
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => router.push('/material-procurement')}
+              className="ml-4 px-6 py-3 bg-stone-700 hover:bg-stone-800 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                />
+              </svg>
+              1. Malzeme Alım Modülü
+            </button>
+          )}
           <button
             onClick={() => router.push('/subcontractors')}
             className="ml-4 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"

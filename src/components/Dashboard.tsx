@@ -367,56 +367,44 @@ export default function Dashboard() {
                 preserveAspectRatio="xMidYMid meet"
               >
                 {/* B Blok - Sol Üst */}
-                <rect
-                  x="26"
-                  y="28"
-                  width="16"
-                  height="14"
+                <polygon
+                  points="25,30 40,28 42,42 28,44"
                   fill="transparent"
                   className="hover:fill-cyan-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('B')}
                 >
                   <title>B Blok</title>
-                </rect>
+                </polygon>
                 
                 {/* A Blok - Sağ Üst */}
-                <rect
-                  x="58"
-                  y="23"
-                  width="18"
-                  height="18"
+                <polygon
+                  points="58,25 75,23 76,40 60,42"
                   fill="transparent"
                   className="hover:fill-blue-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('A')}
                 >
                   <title>A Blok</title>
-                </rect>
+                </polygon>
                 
                 {/* C Blok - Sol Alt */}
-                <rect
-                  x="20"
-                  y="57"
-                  width="20"
-                  height="17"
+                <polygon
+                  points="17,58 34,56 37,73 20,76"
                   fill="transparent"
                   className="hover:fill-emerald-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('D')}
                 >
                   <title>D Blok</title>
-                </rect>
+                </polygon>
                 
                 {/* D Blok - Sağ Alt */}
-                <rect
-                  x="70"
-                  y="54"
-                  width="19"
-                  height="18"
+                <polygon
+                  points="72,53 89,52 90,70 73,72"
                   fill="transparent"
                   className="hover:fill-green-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('C')}
                 >
                   <title>C Blok</title>
-                </rect>
+                </polygon>
               </svg>
             </div>
           </div>

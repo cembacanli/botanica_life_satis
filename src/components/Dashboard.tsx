@@ -363,12 +363,12 @@ export default function Dashboard() {
               {/* Clickable Block Overlay */}
               <svg
                 className="absolute inset-0 w-full h-full"
-                viewBox="0 0 100 100"
+                viewBox="0 0 4800 2700"
                 preserveAspectRatio="xMidYMid meet"
               >
                 {/* B Blok - Sol Üst */}
                 <polygon
-                  points="25,30 40,28 42,42 28,44"
+                  points="1565,920 2085,860 2160,1450 1645,1508"
                   fill="transparent"
                   className="hover:fill-cyan-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('B')}
@@ -378,7 +378,7 @@ export default function Dashboard() {
                 
                 {/* A Blok - Sağ Üst */}
                 <polygon
-                  points="58,25 75,23 76,40 60,42"
+                  points="2570,780 3110,730 3165,1315 2620,1365"
                   fill="transparent"
                   className="hover:fill-blue-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('A')}
@@ -388,7 +388,7 @@ export default function Dashboard() {
                 
                 {/* C Blok - Sol Alt */}
                 <polygon
-                  points="17,58 34,56 37,73 20,76"
+                  points="1220,1605 1805,1545 1878,2218 1285,2275"
                   fill="transparent"
                   className="hover:fill-emerald-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('D')}
@@ -398,7 +398,7 @@ export default function Dashboard() {
                 
                 {/* D Blok - Sağ Alt */}
                 <polygon
-                  points="72,53 89,52 90,70 73,72"
+                  points="2925,1560 3555,1515 3628,2188 2995,2240"
                   fill="transparent"
                   className="hover:fill-green-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('C')}

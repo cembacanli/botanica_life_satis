@@ -354,24 +354,24 @@ export default function Dashboard() {
         <div className="mb-12 -mx-8 px-4 flex justify-center">
           <div className="w-full md:w-3/4 lg:w-2/3 bg-white/5 backdrop-blur-lg rounded-lg p-6 border border-white/10">
             <h2 className="text-lg md:text-2xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
-            <div className="relative rounded-lg overflow-hidden shadow-2xl group max-h-96 md:max-h-full">
+            <div className="relative rounded-lg overflow-hidden shadow-2xl group bg-white/95">
               <img
                 src="/site-plan.jpg"
                 alt="Site Planı"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
               {/* Clickable Block Overlay */}
               <svg
                 className="absolute inset-0 w-full h-full"
                 viewBox="0 0 100 100"
-                preserveAspectRatio="xMidYMid slice"
+                preserveAspectRatio="xMidYMid meet"
               >
                 {/* B Blok - Sol Üst */}
                 <rect
-                  x="15"
-                  y="25"
-                  width="35"
-                  height="18"
+                  x="26"
+                  y="28"
+                  width="16"
+                  height="14"
                   fill="transparent"
                   className="hover:fill-cyan-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('B')}
@@ -381,10 +381,10 @@ export default function Dashboard() {
                 
                 {/* A Blok - Sağ Üst */}
                 <rect
-                  x="65"
-                  y="20"
-                  width="20"
-                  height="30"
+                  x="58"
+                  y="23"
+                  width="18"
+                  height="18"
                   fill="transparent"
                   className="hover:fill-blue-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('A')}
@@ -394,28 +394,28 @@ export default function Dashboard() {
                 
                 {/* C Blok - Sol Alt */}
                 <rect
-                  x="5"
-                  y="55"
-                  width="40"
-                  height="20"
+                  x="20"
+                  y="57"
+                  width="20"
+                  height="17"
+                  fill="transparent"
+                  className="hover:fill-emerald-400 hover:opacity-20 cursor-pointer transition-all"
+                  onClick={() => handleBlockClick('D')}
+                >
+                  <title>D Blok</title>
+                </rect>
+                
+                {/* D Blok - Sağ Alt */}
+                <rect
+                  x="70"
+                  y="54"
+                  width="19"
+                  height="18"
                   fill="transparent"
                   className="hover:fill-green-400 hover:opacity-20 cursor-pointer transition-all"
                   onClick={() => handleBlockClick('C')}
                 >
                   <title>C Blok</title>
-                </rect>
-                
-                {/* D Blok - Sağ Alt */}
-                <rect
-                  x="55"
-                  y="50"
-                  width="40"
-                  height="20"
-                  fill="transparent"
-                  className="hover:fill-fuchsia-500 hover:opacity-30 cursor-pointer transition-all"
-                  onClick={() => handleBlockClick('D')}
-                >
-                  <title>D Blok</title>
                 </rect>
               </svg>
             </div>

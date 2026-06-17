@@ -283,7 +283,7 @@ export default function Dashboard() {
             </button>
           )}
           <button
-            onClick={() => router.push('/subcontractors')}
+            onClick={() => router.push('/contracts')}
             className="ml-4 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -294,7 +294,7 @@ export default function Dashboard() {
                 d="M3 7h18M3 12h18M3 17h18M8 7v10m8-10v10"
               />
             </svg>
-            Taseron / Hakedis
+            Sözleşmeler
           </button>
           <button
             onClick={() => router.push('/plans')}

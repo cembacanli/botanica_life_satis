@@ -12,6 +12,12 @@ interface CostPayload {
   note?: string
 }
 
+function normalizeAmount(value: unknown) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return Number(parsed.toFixed(2))
+}
+
 function getActorUsername(request: NextRequest) {
   return String(request.headers.get('x-actor-username') || '').trim().toLocaleLowerCase('tr-TR')
 }
@@ -60,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     const itemName = String(body?.itemName || '').trim()
     const category = String(body?.category || '').trim()
-    const amount = Number(body?.amount || 0)
+    const amount = normalizeAmount(body?.amount)
     const date = String(body?.date || '').trim()
     const note = String(body?.note || '').trim()
 
@@ -71,7 +77,7 @@ export async function POST(request: NextRequest) {
     const payload = {
       item_name: itemName,
       category,
-      amount: Math.round(amount),
+      amount,
       date,
       note,
       created_at: new Date().toISOString(),
@@ -84,7 +90,7 @@ export async function POST(request: NextRequest) {
         const local = addCostRecord({
           itemName,
           category,
-          amount: Math.round(amount),
+          amount,
           date,
           note,
         })
@@ -123,7 +129,7 @@ export async function PUT(request: NextRequest) {
     const id = String(body?.id || '').trim()
     const itemName = String(body?.itemName || '').trim()
     const category = String(body?.category || '').trim()
-    const amount = Number(body?.amount || 0)
+    const amount = normalizeAmount(body?.amount)
     const date = String(body?.date || '').trim()
     const note = String(body?.note || '').trim()
 
@@ -134,7 +140,7 @@ export async function PUT(request: NextRequest) {
     const updatePayload = {
       item_name: itemName,
       category,
-      amount: Math.round(amount),
+      amount,
       date,
       note,
     }
@@ -150,7 +156,7 @@ export async function PUT(request: NextRequest) {
         const local = updateCostRecord(id, {
           itemName,
           category,
-          amount: Math.round(amount),
+          amount,
           date,
           note,
         })

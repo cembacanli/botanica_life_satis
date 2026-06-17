@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import SalesModal, { SaleData } from '@/components/SalesModal'
 import { Apartment } from '@/lib/data-generator'
+import { formatCustomerName } from '@/lib/customer-name'
 
 interface SalesRecord {
   apartmentId: string
@@ -175,7 +176,10 @@ export default function BlockPage() {
   const handleSalesSubmit = useCallback(
     async (saleData: SaleData | SaleData[]) => {
       // Çoklu seçim kontrolü
-      const dataArray = Array.isArray(saleData) ? saleData : [saleData]
+      const dataArray = (Array.isArray(saleData) ? saleData : [saleData]).map(data => ({
+        ...data,
+        customerName: formatCustomerName(data.customerName || ''),
+      }))
       
       const newRecords = dataArray.map(data => ({
         apartmentId: data.apartmentId,

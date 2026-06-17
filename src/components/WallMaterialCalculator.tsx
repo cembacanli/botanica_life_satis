@@ -1169,18 +1169,57 @@ export default function WallMaterialCalculator({ username = '' }: { username?: s
 
       <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
         <h3 className="text-xl font-semibold text-stone-900">Harç Varsayımları</h3>
-        <p className="mt-1 text-sm text-stone-500">Harç hesabı duvar cinsine göre m² katsayısı ile yapılır.</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-          <input type="number" value={mortar.wasteRate} onChange={event => updateMortar('wasteRate', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="Harç Fire Oranı (%)" />
-          <input type="number" value={mortar.cementPerM3} onChange={event => updateMortar('cementPerM3', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="1 m3 Harca Çimento (kg)" />
-          <input type="number" value={mortar.sandPerM3} onChange={event => updateMortar('sandPerM3', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="1 m3 Harca Kum (m3)" />
-          <input type="number" value={mortar.limePerM3} onChange={event => updateMortar('limePerM3', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="1 m3 Harca Kireç (kg)" />
-          <input type="number" value={mortar.cementPrice} onChange={event => updateMortar('cementPrice', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="Çimento Birim Fiyat" />
-          <input type="number" value={mortar.sandPrice} onChange={event => updateMortar('sandPrice', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="Kum Birim Fiyat" />
-          <input type="number" value={mortar.limePrice} onChange={event => updateMortar('limePrice', Number(event.target.value || 0))} className="rounded-2xl border border-stone-300 px-4 py-3" placeholder="Kireç Birim Fiyat" />
+        <p className="mt-1 text-sm text-stone-500">Önce harç karışım miktarlarını ve birim fiyatları girin. Sistem her duvarın kalınlığına göre uygun harç katsayısını kullanır.</p>
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+          Sol taraftaki alanlar <strong>harç miktarını</strong>, sağ taraftaki alanlar ise <strong>maliyet hesabını</strong> belirler.
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">Harç Fire Oranı (%)</span>
+            <span className="mb-3 block text-xs text-stone-500">Toplam harca eklenecek emniyet payı</span>
+            <input type="number" value={mortar.wasteRate} onChange={event => updateMortar('wasteRate', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">1 m³ Harca Çimento (kg)</span>
+            <span className="mb-3 block text-xs text-stone-500">Bir metreküp harç için çimento miktarı</span>
+            <input type="number" value={mortar.cementPerM3} onChange={event => updateMortar('cementPerM3', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">1 m³ Harca Kum (m³)</span>
+            <span className="mb-3 block text-xs text-stone-500">Bir metreküp harç için kum miktarı</span>
+            <input type="number" value={mortar.sandPerM3} onChange={event => updateMortar('sandPerM3', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">1 m³ Harca Kireç (kg)</span>
+            <span className="mb-3 block text-xs text-stone-500">Bir metreküp harç için kireç miktarı</span>
+            <input type="number" value={mortar.limePerM3} onChange={event => updateMortar('limePerM3', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">Çimento Birim Fiyat</span>
+            <span className="mb-3 block text-xs text-stone-500">1 kg çimento için fiyat</span>
+            <input type="number" value={mortar.cementPrice} onChange={event => updateMortar('cementPrice', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">Kum Birim Fiyat</span>
+            <span className="mb-3 block text-xs text-stone-500">1 m³ kum için fiyat</span>
+            <input type="number" value={mortar.sandPrice} onChange={event => updateMortar('sandPrice', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <label className="block rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <span className="mb-2 block text-sm font-semibold text-stone-700">Kireç Birim Fiyat</span>
+            <span className="mb-3 block text-xs text-stone-500">1 kg kireç için fiyat</span>
+            <input type="number" value={mortar.limePrice} onChange={event => updateMortar('limePrice', Number(event.target.value || 0))} className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3" />
+          </label>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 md:col-span-2 xl:col-span-1">
+            <div className="text-sm font-semibold text-amber-800">Katsayı Notu</div>
+            <div className="mt-3 space-y-2 text-xs leading-5 text-amber-900">
+              <div>20 cm bims: 0.027 m³/m²</div>
+              <div>13,5 cm tuğla: 0.020 m³/m²</div>
+              <div>8,5 cm tuğla: 0.013 m³/m²</div>
+            </div>
+          </div>
         </div>
         <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
-          25 cm bims: 0.034 m3/m2, 20 cm bims: 0.027 m3/m2, 15 cm bims: 0.020 m3/m2, 10 cm bims: 0.014 m3/m2, 13.5 cm tuğla: 0.020 m3/m2, 8.5 cm tuğla: 0.013 m3/m2.
+          Kullanılan tüm harç katsayıları: 25 cm bims: 0.034 m³/m², 20 cm bims: 0.027 m³/m², 15 cm bims: 0.020 m³/m², 10 cm bims: 0.014 m³/m², 13.5 cm tuğla: 0.020 m³/m², 8.5 cm tuğla: 0.013 m³/m².
         </div>
       </section>
 

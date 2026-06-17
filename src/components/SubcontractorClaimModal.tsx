@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { ClaimStatus } from '@/lib/subcontractor-claims-store'
 
 export interface SubcontractorClaimFormData {
+  workItem?: string
+  claimQuantity?: number
   previousPaidAmount: number
   currentClaimAmount: number
   deductionAmount: number
@@ -20,12 +22,24 @@ interface SubcontractorClaimModalProps {
   subcontractorName: string
   subcontractorWorkScope?: string
   subcontractorContractAmount: number
+  contractItems?: ContractItem[]
   defaultPreviousPaidAmount?: number
   title?: string
   submitLabel?: string
 }
 
+interface ContractItem {
+  id: string
+  name: string
+  unit: string
+  estimatedQuantity: number
+  unitPrice: number
+  amount: number
+}
+
 const defaultData = (): SubcontractorClaimFormData => ({
+  workItem: '',
+  claimQuantity: 0,
   previousPaidAmount: 0,
   currentClaimAmount: 0,
   deductionAmount: 0,
@@ -42,8 +56,9 @@ export default function SubcontractorClaimModal({
   subcontractorName,
   subcontractorWorkScope,
   subcontractorContractAmount,
+  contractItems = [],
   defaultPreviousPaidAmount = 0,
-  title = 'Yeni Hakedis Girisi',
+  title = 'Yeni Hakediş Girişi',
   submitLabel = 'Kaydet',
 }: SubcontractorClaimModalProps) {
   const [formData, setFormData] = useState<SubcontractorClaimFormData>(defaultData)
@@ -54,6 +69,8 @@ export default function SubcontractorClaimModal({
     if (!isOpen) return
     if (initialData) {
       setFormData({
+        workItem: initialData.workItem || '',
+        claimQuantity: Number(initialData.claimQuantity || 0),
         previousPaidAmount: Number(initialData.previousPaidAmount || 0),
         currentClaimAmount: Number(initialData.currentClaimAmount || 0),
         deductionAmount: Number(initialData.deductionAmount || 0),
@@ -64,10 +81,16 @@ export default function SubcontractorClaimModal({
     } else {
       setFormData({
         ...defaultData(),
+        workItem: contractItems[0]?.name || subcontractorWorkScope || '',
         previousPaidAmount: Math.max(Math.round(defaultPreviousPaidAmount || 0), 0),
       })
     }
-  }, [isOpen, initialData, defaultPreviousPaidAmount])
+  }, [isOpen, initialData, defaultPreviousPaidAmount, contractItems, subcontractorWorkScope])
+
+  const selectedContractItem = useMemo(
+    () => contractItems.find(item => item.name === formData.workItem) || null,
+    [contractItems, formData.workItem]
+  )
 
   const progressPercent = useMemo(() => {
     if (!subcontractorContractAmount || subcontractorContractAmount <= 0) return 0
@@ -98,11 +121,11 @@ export default function SubcontractorClaimModal({
   const handleSubmit = async () => {
     setError('')
     if (!subcontractorContractAmount || subcontractorContractAmount <= 0) {
-      setError('Taseron sozlesme tutari bulunamadi.')
+      setError('Taşeron sözleşme tutarı bulunamadı.')
       return
     }
     if (!formData.currentClaimAmount || formData.currentClaimAmount <= 0) {
-      setError('Bu hakedis tutari 0 dan buyuk olmali.')
+      setError('Bu hakediş tutarı 0 dan büyük olmalıdır.')
       return
     }
     if (!formData.claimDate) {
@@ -113,17 +136,26 @@ export default function SubcontractorClaimModal({
     setSaving(true)
     try {
       await onSave({
+        workItem: (formData.workItem || subcontractorWorkScope || subcontractorName).trim(),
+        claimQuantity: Number(formData.claimQuantity || 0),
         previousPaidAmount: Math.max(Math.round(formData.previousPaidAmount || 0), 0),
-        currentClaimAmount: Math.round(formData.currentClaimAmount || 0),
+        currentClaimAmount: Number(Number(formData.currentClaimAmount || 0).toFixed(2)),
         deductionAmount: Math.max(Math.round(formData.deductionAmount || 0), 0),
         claimDate: formData.claimDate,
         status: formData.status,
-        note: (formData.note || '').trim(),
+        note: [
+          selectedContractItem && formData.claimQuantity
+            ? `[Sözleşme Kalemi] ${selectedContractItem.name} | Miktar: ${formData.claimQuantity} ${selectedContractItem.unit} | Birim Fiyat: ${formatCurrency(selectedContractItem.unitPrice)}`
+            : '',
+          (formData.note || '').trim(),
+        ]
+          .filter(Boolean)
+          .join('\n'),
       })
       setFormData(defaultData())
       onClose()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Hakedis kaydedilemedi.'
+      const message = err instanceof Error ? err.message : 'Hakediş kaydedilemedi.'
       setError(message)
     } finally {
       setSaving(false)
@@ -143,8 +175,10 @@ export default function SubcontractorClaimModal({
       <div className="w-full max-w-3xl bg-white rounded-lg shadow-2xl overflow-hidden">
         <div className="px-6 py-4 bg-gradient-to-r from-teal-700 to-cyan-700 text-white">
           <h3 className="text-lg font-bold">{title}</h3>
-          <div className="text-xs mt-1 opacity-90">Taseron: {subcontractorName}</div>
-          {subcontractorWorkScope && <div className="text-xs mt-1 opacity-90">Is Kapsami: {subcontractorWorkScope}</div>}
+          <div className="text-xs mt-1 opacity-90">Taşeron: {subcontractorName}</div>
+          {subcontractorWorkScope ? (
+            <div className="text-xs mt-1 opacity-90">İş Kapsamı: {subcontractorWorkScope}</div>
+          ) : null}
         </div>
 
         <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
@@ -156,7 +190,7 @@ export default function SubcontractorClaimModal({
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="md:col-span-2">
-              <label className="block text-sm text-gray-700 mb-1">Sozlesme Tutari (TL)</label>
+              <label className="block text-sm text-gray-700 mb-1">Sözleşme Tutarı (TL)</label>
               <input
                 type="number"
                 value={subcontractorContractAmount || 0}
@@ -165,7 +199,7 @@ export default function SubcontractorClaimModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Ilerleme (%)</label>
+              <label className="block text-sm text-gray-700 mb-1">İlerleme (%)</label>
               <input
                 type="number"
                 value={progressPercent}
@@ -184,9 +218,68 @@ export default function SubcontractorClaimModal({
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded border border-gray-200 bg-gray-50 p-3">
+            <div className="md:col-span-2">
+              <label className="block text-sm text-gray-700 mb-1">Sözleşme İş Kalemi</label>
+              <select
+                value={formData.workItem || ''}
+                onChange={e => {
+                  const selectedName = e.target.value
+                  const selected = contractItems.find(item => item.name === selectedName)
+                  const nextQuantity = Number(formData.claimQuantity || 0)
+                  setFormData(prev => ({
+                    ...prev,
+                    workItem: selectedName,
+                    currentClaimAmount: selected && nextQuantity > 0 ? Number((nextQuantity * selected.unitPrice).toFixed(2)) : prev.currentClaimAmount,
+                  }))
+                }}
+                className="w-full px-3 py-2 border rounded bg-white"
+              >
+                {contractItems.length === 0 ? (
+                  <option value={subcontractorWorkScope || subcontractorName}>
+                    {subcontractorWorkScope || subcontractorName}
+                  </option>
+                ) : (
+                  contractItems.map(item => (
+                    <option key={item.id} value={item.name}>
+                      {item.name} - {item.estimatedQuantity} {item.unit} x {formatCurrency(item.unitPrice)}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Bu Hakediş Miktarı</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.claimQuantity || ''}
+                onChange={e => {
+                  const quantity = Number(e.target.value || 0)
+                  setFormData(prev => ({
+                    ...prev,
+                    claimQuantity: quantity,
+                    currentClaimAmount: selectedContractItem ? Number((quantity * selectedContractItem.unitPrice).toFixed(2)) : prev.currentClaimAmount,
+                  }))
+                }}
+                className="w-full px-3 py-2 border rounded bg-white"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Birim / Birim Fiyat</label>
+              <div className="rounded border bg-white px-3 py-2 text-sm text-gray-800">
+                {selectedContractItem
+                  ? `${selectedContractItem.unit} / ${formatCurrency(selectedContractItem.unitPrice)}`
+                  : '-'}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Onceki Odeme (TL)</label>
+              <label className="block text-sm text-gray-700 mb-1">Önceki Ödeme (TL)</label>
               <input
                 type="number"
                 min="0"
@@ -197,12 +290,13 @@ export default function SubcontractorClaimModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Bu Hakedis (TL)</label>
+              <label className="block text-sm text-gray-700 mb-1">Bu Hakediş (TL)</label>
               <input
                 type="number"
                 min="0"
+                step="0.01"
                 value={formData.currentClaimAmount || ''}
-                onChange={e => setFormData(prev => ({ ...prev, currentClaimAmount: parseInt(e.target.value, 10) || 0 }))}
+                onChange={e => setFormData(prev => ({ ...prev, currentClaimAmount: Number(e.target.value || 0) }))}
                 className="w-full px-3 py-2 border rounded"
                 placeholder="0"
               />
@@ -226,30 +320,30 @@ export default function SubcontractorClaimModal({
                 className="w-full px-3 py-2 border rounded"
               >
                 <option value="taslak">Taslak</option>
-                <option value="onaylandi">Onaylandi</option>
-                <option value="odendi">Odendi</option>
+                <option value="onaylandi">Onaylandı</option>
+                <option value="odendi">Ödendi</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded bg-cyan-50 border border-cyan-200 p-3">
-              <div className="text-xs text-cyan-700">Gerceklesen Tutar (Ilerleme Bazli)</div>
+              <div className="text-xs text-cyan-700">Gerçekleşen Tutar (İlerleme Bazlı)</div>
               <div className="text-lg font-bold text-cyan-900">{formatCurrency(completedAmount)}</div>
             </div>
             <div className="rounded bg-teal-50 border border-teal-200 p-3">
-              <div className="text-xs text-teal-700">Net Odeme (Bu Hakedis - Kesinti)</div>
+              <div className="text-xs text-teal-700">Net Ödeme (Bu Hakediş - Kesinti)</div>
               <div className="text-lg font-bold text-teal-900">{formatCurrency(netPayableAmount)}</div>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-700 mb-1">Aciklama (Opsiyonel)</label>
+            <label className="block text-sm text-gray-700 mb-1">Açıklama (Opsiyonel)</label>
             <textarea
               value={formData.note}
               onChange={e => setFormData(prev => ({ ...prev, note: e.target.value }))}
               className="w-full px-3 py-2 border rounded min-h-24"
-              placeholder="Kisa not"
+              placeholder="Kısa not"
             />
           </div>
         </div>
@@ -260,7 +354,7 @@ export default function SubcontractorClaimModal({
             disabled={saving}
             className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
           >
-            Iptal
+            İptal
           </button>
           <button
             onClick={handleSubmit}

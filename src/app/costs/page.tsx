@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import CostModal, { CostFormData } from '@/components/CostModal'
 
+const currencyFormatter = new Intl.NumberFormat('tr-TR', {
+  style: 'currency',
+  currency: 'TRY',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 export default function CostsPage() {
   const router = useRouter()
   const { user, loading, isAuthenticated } = useAuth()
@@ -213,16 +220,14 @@ export default function CostsPage() {
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
             <div className="text-sm text-gray-600">Toplam Maliyet</div>
             <div className="text-3xl font-bold text-red-600 mt-1">
-              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(totalCostAmount)}
+              {currencyFormatter.format(totalCostAmount)}
             </div>
             <div className="text-xs text-gray-500 mt-2">{costs.length} kayit</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
             <div className="text-sm text-gray-600">Ortalama Maliyet</div>
             <div className="text-3xl font-bold text-blue-700 mt-1">
-              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(
-                averageCostPerSquareMeter
-              )}
+              {currencyFormatter.format(averageCostPerSquareMeter)}
             </div>
             <div className="text-xs text-gray-500 mt-2">m² basina (Satilan toplam: {soldTotalArea} m²)</div>
             <div className="text-xs text-gray-500 mt-1">
@@ -248,7 +253,7 @@ export default function CostsPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="font-bold text-gray-900">
-                      {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(item.amount || 0)}
+                      {currencyFormatter.format(item.amount || 0)}
                     </div>
                     <button
                       onClick={() => handleEditCost(item)}

@@ -12,9 +12,19 @@ interface Subcontractor {
   contractDate: string
   workDurationDays: number
   contractAmount: number
+  contractItems?: ContractItem[]
   phone?: string
   note?: string
   createdAt: string
+}
+
+interface ContractItem {
+  id: string
+  name: string
+  unit: string
+  estimatedQuantity: number
+  unitPrice: number
+  amount: number
 }
 
 interface SubcontractorClaim {
@@ -75,7 +85,7 @@ export default function SubcontractorsPage() {
 
     const json = await response.json()
     if (!response.ok) {
-      throw new Error(json?.error || 'Taseron kaydedilemedi.')
+      throw new Error(json?.error || 'Taşeron kaydedilemedi.')
     }
 
     if (isEdit) {
@@ -252,7 +262,7 @@ export default function SubcontractorsPage() {
   }, [claims, subcontractors.length])
 
   if (!mounted || loading) {
-    return <div className="min-h-screen p-8">Yukleniyor...</div>
+    return <div className="min-h-screen p-8">Yükleniyor...</div>
   }
 
   return (
@@ -260,8 +270,10 @@ export default function SubcontractorsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Taseron Takip ve Hakedis Modulu</h1>
-            <div className="text-base text-gray-600">Once taseron ekleyin, sonra o taseronun sayfasinda hakedis girin.</div>
+            <h1 className="text-3xl font-bold text-gray-900">Taşeron Takibi ve Hakediş</h1>
+            <div className="text-base text-gray-600">
+              Sözleşme kayıtlarını yönetin, ardından taşeron bazında hakediş girin.
+            </div>
           </div>
           <div className="flex gap-2">
             <button
@@ -271,40 +283,46 @@ export default function SubcontractorsPage() {
               Ana Sayfa
             </button>
             <button
+              onClick={() => router.push('/contracts')}
+              className="px-5 py-2.5 text-base bg-slate-800 hover:bg-slate-900 text-white rounded"
+            >
+              Sözleşme Merkezi
+            </button>
+            <button
               onClick={() => {
                 setEditingSubcontractor(null)
                 setModalOpen(true)
               }}
               className="px-5 py-2.5 text-base bg-sky-700 hover:bg-sky-800 text-white rounded"
             >
-              Yeni Taseron Ekle
+              Yeni Taşeron Ekle
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Taseron</div>
+            <div className="text-base text-gray-600">Toplam Taşeron</div>
             <div className="text-3xl font-bold text-sky-700 mt-1">{totals.subcontractorCount}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Hakedis Kaydi</div>
+            <div className="text-base text-gray-600">Toplam Hakediş Kaydı</div>
             <div className="text-3xl font-bold text-cyan-700 mt-1">{totals.claimCount}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Net Odeme</div>
+            <div className="text-base text-gray-600">Toplam Net Ödeme</div>
             <div className="text-3xl font-bold text-teal-700 mt-1">{formatCurrency(totals.totalNet)}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Odenen Net</div>
+            <div className="text-base text-gray-600">Ödenen Net</div>
             <div className="text-3xl font-bold text-green-700 mt-1">{formatCurrency(totals.totalPaid)}</div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Taseron Listesi</div>
+          <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Taşeron Listesi</div>
           {subcontractors.length === 0 ? (
-            <div className="p-5 text-gray-500">Taseron kaydi yok</div>
+            <div className="p-5 text-gray-500">Taşeron kaydı yok</div>
           ) : (
             <div className="divide-y">
               {subcontractors.map(item => {
@@ -339,25 +357,25 @@ export default function SubcontractorsPage() {
                       <div className="text-xl font-semibold text-gray-900">{item.name}</div>
                       <div className="text-base text-gray-600">{item.workScope}</div>
                       <div className="text-sm text-gray-500 mt-1">
-                        Sozlesme: {formatDate(item.contractDate)} | Sure: {item.workDurationDays} gun | Tutar:{' '}
+                        Sözleşme: {formatDate(item.contractDate)} | Süre: {item.workDurationDays} gün | Tutar:{' '}
                         {formatCurrency(totalContractAmount)}
                       </div>
                       <div className="text-sm mt-1">
-                        <span className="text-gray-700">Yaklasik Tamamlanma: %{completionPercent.toFixed(1)}</span>
+                        <span className="text-gray-700">Yaklaşık Tamamlanma: %{completionPercent.toFixed(1)}</span>
                         <span className={`ml-3 font-medium ${contractStatus.isDelayed ? 'text-red-600' : 'text-green-600'}`}>
                           {contractStatus.label}
                         </span>
                       </div>
                       <div className="text-sm text-gray-500 mt-1">
-                        {item.phone ? `Tel: ${item.phone} | ` : ''}Hakedis: {relatedClaims.length} kayit | Net:{' '}
+                        {item.phone ? `Tel: ${item.phone} | ` : ''}Hakediş: {relatedClaims.length} kayıt | Net:{' '}
                         {formatCurrency(totalNet)}
                       </div>
                       <div className="text-sm text-gray-700 mt-1">
-                        Bartir dahil taserona yapilmis toplam odeme: {formatCurrency(totalPaymentIncludingBarter)}
-                        <span className="text-gray-500"> (Bartir: {formatCurrency(analysisDeduction)} + Hakedis toplami: {formatCurrency(totalHakedisAmount)})</span>
+                        Barter dahil taşerona yapılmış toplam ödeme: {formatCurrency(totalPaymentIncludingBarter)}
+                        <span className="text-gray-500"> (Barter: {formatCurrency(analysisDeduction)} + Hakediş toplamı: {formatCurrency(totalHakedisAmount)})</span>
                       </div>
                       <div className="text-sm text-amber-700 mt-1 font-medium">
-                        Kalan Odenecek Tutar: {formatCurrency(remainingPayableAmount)}
+                        Kalan Ödenecek Tutar: {formatCurrency(remainingPayableAmount)}
                       </div>
                       {analysisText && <div className="text-sm text-gray-500 mt-1">{analysisText}</div>}
                     </div>
@@ -366,7 +384,7 @@ export default function SubcontractorsPage() {
                         onClick={() => router.push(`/subcontractors/${item.id}`)}
                         className="px-4 py-2 text-sm rounded bg-teal-100 text-teal-800 hover:bg-teal-200"
                       >
-                        Hakedisler
+                        Hakedişler
                       </button>
                       <button
                         onClick={() => {
@@ -375,7 +393,7 @@ export default function SubcontractorsPage() {
                         }}
                         className="px-4 py-2 text-sm rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
                       >
-                        Duzenle
+                        Düzenle
                       </button>
                       <button
                         onClick={() => handleDeleteSubcontractor(item)}
@@ -400,8 +418,8 @@ export default function SubcontractorsPage() {
         }}
         onSave={handleSaveSubcontractor}
         initialData={editingSubcontractor}
-        title={editingSubcontractor ? 'Taseron Duzenle' : 'Yeni Taseron Ekle'}
-        submitLabel={editingSubcontractor ? 'Guncelle' : 'Kaydet'}
+        title={editingSubcontractor ? 'Taşeron Sözleşmesini Düzenle' : 'Yeni Taşeron Ekle'}
+        submitLabel={editingSubcontractor ? 'Güncelle' : 'Kaydet'}
       />
     </div>
   )

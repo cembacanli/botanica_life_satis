@@ -39,6 +39,13 @@ export default function CostModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const parseAmountInput = (value: string) => {
+    const normalized = value.replace(',', '.').trim()
+    if (!normalized) return 0
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
   useEffect(() => {
     if (!isOpen) return
     if (initialData) {
@@ -87,7 +94,7 @@ export default function CostModal({
       await onSave({
         itemName: formData.itemName.trim(),
         category: formData.category.trim(),
-        amount: Math.round(formData.amount),
+        amount: Number(formData.amount.toFixed(2)),
         date: formData.date,
         note: (formData.note || '').trim(),
       })
@@ -140,8 +147,10 @@ export default function CostModal({
               <input
                 type="number"
                 min="0"
+                step="0.01"
+                inputMode="decimal"
                 value={formData.amount || ''}
-                onChange={e => setFormData(prev => ({ ...prev, amount: parseInt(e.target.value, 10) || 0 }))}
+                onChange={e => setFormData(prev => ({ ...prev, amount: parseAmountInput(e.target.value) }))}
                 className="w-full px-3 py-2 border rounded"
                 placeholder="0"
               />
@@ -189,4 +198,3 @@ export default function CostModal({
     </div>
   )
 }
-

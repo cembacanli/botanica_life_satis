@@ -8,8 +8,18 @@ export interface SubcontractorFormData {
   contractDate: string
   workDurationDays: number
   contractAmount: number
+  contractItems?: ContractItem[]
   phone?: string
   note?: string
+}
+
+export interface ContractItem {
+  id: string
+  name: string
+  unit: string
+  estimatedQuantity: number
+  unitPrice: number
+  amount: number
 }
 
 interface SubcontractorModalProps {
@@ -27,8 +37,18 @@ const defaultData = (): SubcontractorFormData => ({
   contractDate: new Date().toISOString().slice(0, 10),
   workDurationDays: 0,
   contractAmount: 0,
+  contractItems: [],
   phone: '',
   note: '',
+})
+
+const emptyContractItem = (): ContractItem => ({
+  id: `item-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  name: '',
+  unit: '',
+  estimatedQuantity: 0,
+  unitPrice: 0,
+  amount: 0,
 })
 
 export default function SubcontractorModal({
@@ -36,11 +56,12 @@ export default function SubcontractorModal({
   onClose,
   onSave,
   initialData,
-  title = 'Yeni Taseron Ekle',
+  title = 'Yeni Taşeron Sözleşmesi',
   submitLabel = 'Kaydet',
 }: SubcontractorModalProps) {
   const [formData, setFormData] = useState<SubcontractorFormData>(defaultData)
   const [contractAmountInput, setContractAmountInput] = useState('')
+  const [contractItems, setContractItems] = useState<ContractItem[]>([emptyContractItem()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -73,6 +94,45 @@ export default function SubcontractorModal({
     return `${cleaned.slice(0, firstComma + 1)}${cleaned.slice(firstComma + 1).replace(/,/g, '')}`
   }
 
+  const normalizeItems = (items: ContractItem[]) =>
+    items
+      .map(item => {
+        const estimatedQuantity = Number(item.estimatedQuantity || 0)
+        const unitPrice = Number(item.unitPrice || 0)
+        const amount = Number((estimatedQuantity * unitPrice).toFixed(2))
+        return {
+          ...item,
+          name: item.name.trim(),
+          unit: item.unit.trim(),
+          estimatedQuantity,
+          unitPrice,
+          amount,
+        }
+      })
+      .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0)
+
+  const contractItemsTotal = contractItems.reduce((sum, item) => {
+    return sum + Number((Number(item.estimatedQuantity || 0) * Number(item.unitPrice || 0)).toFixed(2))
+  }, 0)
+
+  const updateContractItem = (id: string, patch: Partial<ContractItem>) => {
+    setContractItems(prev =>
+      prev.map(item => {
+        if (item.id !== id) return item
+        const next = { ...item, ...patch }
+        const amount = Number((Number(next.estimatedQuantity || 0) * Number(next.unitPrice || 0)).toFixed(2))
+        return { ...next, amount }
+      })
+    )
+  }
+
+  const removeContractItem = (id: string) => {
+    setContractItems(prev => {
+      const next = prev.filter(item => item.id !== id)
+      return next.length > 0 ? next : [emptyContractItem()]
+    })
+  }
+
   useEffect(() => {
     if (!isOpen) return
     if (initialData) {
@@ -82,15 +142,21 @@ export default function SubcontractorModal({
         contractDate: initialData.contractDate || new Date().toISOString().slice(0, 10),
         workDurationDays: Number(initialData.workDurationDays || 0),
         contractAmount: Number(initialData.contractAmount || 0),
+        contractItems: Array.isArray(initialData.contractItems) ? initialData.contractItems : [],
         phone: initialData.phone || '',
         note: initialData.note || '',
       })
+      const initialItems = Array.isArray(initialData.contractItems) && initialData.contractItems.length > 0
+        ? initialData.contractItems
+        : [emptyContractItem()]
+      setContractItems(initialItems)
       setContractAmountInput(
         Number(initialData.contractAmount || 0) > 0 ? formatAmountTr(Number(initialData.contractAmount || 0)) : ''
       )
     } else {
       setFormData(defaultData())
       setContractAmountInput('')
+      setContractItems([emptyContractItem()])
     }
   }, [isOpen, initialData])
 
@@ -106,23 +172,28 @@ export default function SubcontractorModal({
   const handleSubmit = async () => {
     setError('')
     if (!formData.name.trim()) {
-      setError('Taseron adi zorunludur.')
+      setError('Taşeron adı zorunludur.')
       return
     }
     if (!formData.workScope.trim()) {
-      setError('Is kapsami zorunludur.')
+      setError('İş kapsamı zorunludur.')
       return
     }
     if (!formData.contractDate) {
-      setError('Sozlesme tarihi zorunludur.')
+      setError('Sözleşme tarihi zorunludur.')
       return
     }
     if (!formData.workDurationDays || formData.workDurationDays <= 0) {
-      setError('Isin suresi 0 dan buyuk olmali.')
+      setError('İş süresi 0 dan büyük olmalıdır.')
       return
     }
-    if (!formData.contractAmount || formData.contractAmount <= 0) {
-      setError('Sozlesme tutari 0 dan buyuk olmali.')
+    const finalContractItems = normalizeItems(contractItems)
+    const finalContractAmount = finalContractItems.length > 0
+      ? finalContractItems.reduce((sum, item) => sum + item.amount, 0)
+      : Number(formData.contractAmount || 0)
+
+    if (!finalContractAmount || finalContractAmount <= 0) {
+      setError('Sözleşme tutarı 0 dan büyük olmalıdır.')
       return
     }
 
@@ -133,13 +204,14 @@ export default function SubcontractorModal({
         workScope: formData.workScope.trim(),
         contractDate: formData.contractDate,
         workDurationDays: Math.round(formData.workDurationDays || 0),
-        contractAmount: Math.round(formData.contractAmount || 0),
+        contractAmount: Number(finalContractAmount.toFixed(2)),
+        contractItems: finalContractItems,
         phone: (formData.phone || '').trim(),
         note: (formData.note || '').trim(),
       })
       onClose()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Taseron kaydedilemedi.'
+      const message = err instanceof Error ? err.message : 'Taşeron sözleşmesi kaydedilemedi.'
       setError(message)
     } finally {
       setSaving(false)
@@ -148,12 +220,12 @@ export default function SubcontractorModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white rounded-lg shadow-2xl overflow-hidden">
+      <div className="w-full max-w-5xl bg-white rounded-lg shadow-2xl overflow-hidden">
         <div className="px-6 py-4 bg-gradient-to-r from-sky-700 to-blue-700 text-white">
           <h3 className="text-lg font-bold">{title}</h3>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-h-[78vh] overflow-y-auto">
           {error && (
             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
               {error}
@@ -161,28 +233,28 @@ export default function SubcontractorModal({
           )}
 
           <div>
-            <label className="block text-sm text-gray-700 mb-1">Taseron Adi</label>
+            <label className="block text-sm text-gray-700 mb-1">Taşeron Adı</label>
             <input
               value={formData.name}
               onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
               className="w-full px-3 py-2 border rounded"
-              placeholder="Orn: ABC Kalip Iscilik"
+              placeholder="Örn: ABC Kalıp İşçilik"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-700 mb-1">Is Kapsami</label>
+            <label className="block text-sm text-gray-700 mb-1">İş Kapsamı</label>
             <input
               value={formData.workScope}
               onChange={e => setFormData(prev => ({ ...prev, workScope: e.target.value }))}
               className="w-full px-3 py-2 border rounded"
-              placeholder="Orn: Kaba insaat, mekanik, elektrik"
+              placeholder="Örn: kaba inşaat, mekanik, elektrik"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Sozlesme Tarihi</label>
+              <label className="block text-sm text-gray-700 mb-1">Sözleşme Tarihi</label>
               <input
                 type="date"
                 value={formData.contractDate}
@@ -191,18 +263,18 @@ export default function SubcontractorModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Isin Suresi (Gun)</label>
+              <label className="block text-sm text-gray-700 mb-1">İşin Süresi (Gün)</label>
               <input
                 type="number"
                 min="1"
                 value={formData.workDurationDays || ''}
                 onChange={e => setFormData(prev => ({ ...prev, workDurationDays: parseInt(e.target.value, 10) || 0 }))}
                 className="w-full px-3 py-2 border rounded"
-                placeholder="Orn: 120"
+                placeholder="Örn: 120"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Sozlesme Tutari (TL)</label>
+              <label className="block text-sm text-gray-700 mb-1">Sözleşme Tutarı (TL)</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -233,6 +305,96 @@ export default function SubcontractorModal({
             </div>
           </div>
 
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Sözleşme İş Kalemleri</div>
+                <div className="text-xs text-gray-500">Örn: Kazı, m3, takribi miktar, birim fiyat ve toplam tutar.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContractItems(prev => [...prev, emptyContractItem()])}
+                className="rounded bg-sky-700 px-3 py-2 text-sm font-medium text-white hover:bg-sky-800"
+              >
+                Kalem Ekle
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {contractItems.map(item => {
+                const amount = Number(item.estimatedQuantity || 0) * Number(item.unitPrice || 0)
+                return (
+                  <div key={item.id} className="grid grid-cols-1 gap-2 rounded border border-gray-200 bg-white p-3 md:grid-cols-[minmax(160px,1.4fr)_90px_120px_120px_120px_44px]">
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">İş Kalemi</label>
+                      <input
+                        value={item.name}
+                        onChange={e => updateContractItem(item.id, { name: e.target.value })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="Kazı"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Birim</label>
+                      <input
+                        value={item.unit}
+                        onChange={e => updateContractItem(item.id, { unit: e.target.value })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="m3"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Takribi Miktar</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.estimatedQuantity || ''}
+                        onChange={e => updateContractItem(item.id, { estimatedQuantity: Number(e.target.value || 0) })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Birim Fiyat</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unitPrice || ''}
+                        onChange={e => updateContractItem(item.id, { unitPrice: Number(e.target.value || 0) })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Tutar</label>
+                      <div className="rounded border bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900">
+                        {formatAmountTr(amount)}
+                      </div>
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => removeContractItem(item.id)}
+                        className="h-10 w-10 rounded bg-red-50 text-sm font-semibold text-red-700 hover:bg-red-100"
+                        title="Kalemi sil"
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mt-3 flex justify-end text-sm">
+              <div className="rounded bg-gray-900 px-4 py-2 font-semibold text-white">
+                İş kalemleri toplamı: {formatAmountTr(contractItemsTotal)} TL
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm text-gray-700 mb-1">Telefon (Opsiyonel)</label>
             <input
@@ -245,13 +407,13 @@ export default function SubcontractorModal({
 
           <div>
             <label className="block text-sm text-gray-700 mb-1">
-              Aciklama (Opsiyonel) - Bartir Var ise Blok, Daire numarasi ve Toplam Daire Satis Tutarini giriniz
+              Açıklama
             </label>
             <textarea
               value={formData.note}
               onChange={e => setFormData(prev => ({ ...prev, note: e.target.value }))}
               className="w-full px-3 py-2 border rounded min-h-24"
-              placeholder="Orn: D Blok 118, 119, 120 numarali daireler, toplam satis bedeli 8.000.000 TL"
+              placeholder="Barter varsa blok, daire numaraları ve toplam satış bedelini burada belirtin."
             />
           </div>
         </div>
@@ -262,7 +424,7 @@ export default function SubcontractorModal({
             disabled={saving}
             className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
           >
-            Iptal
+            İptal
           </button>
           <button
             onClick={handleSubmit}

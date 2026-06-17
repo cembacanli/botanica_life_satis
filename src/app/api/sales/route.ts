@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { formatCustomerName } from '@/lib/customer-name'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -49,7 +50,7 @@ export async function GET() {
     const records = (data || []).map((row: any) => ({
       apartmentId: row.apartment_id,
       saleType: row.sale_type,
-      customerName: row.customer_name,
+      customerName: formatCustomerName(row.customer_name || ''),
       customerPhone: row.customer_phone,
       date: row.date,
     }))
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
 
     for (const record of records) {
       const safeDate = normalizeSaleDate(record.date)
+      const normalizedCustomerName = formatCustomerName(record.customerName)
 
       const { data: existing, error: existingError } = await supabase
         .from('sales')
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
           .from('sales')
           .update({
             sale_type: record.saleType,
-            customer_name: record.customerName,
+            customer_name: normalizedCustomerName,
             customer_phone: record.customerPhone,
             date: safeDate,
           })
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest) {
         const { error: insertError } = await supabase.from('sales').insert({
           apartment_id: record.apartmentId,
           sale_type: record.saleType,
-          customer_name: record.customerName,
+          customer_name: normalizedCustomerName,
           customer_phone: record.customerPhone,
           date: safeDate,
         })
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest) {
     const updated = (data || []).map((row: any) => ({
       apartmentId: row.apartment_id,
       saleType: row.sale_type,
-      customerName: row.customer_name,
+      customerName: formatCustomerName(row.customer_name || ''),
       customerPhone: row.customer_phone,
       date: row.date,
     }))
@@ -151,7 +153,7 @@ export async function DELETE(request: NextRequest) {
     const updated = (data || []).map((row: any) => ({
       apartmentId: row.apartment_id,
       saleType: row.sale_type,
-      customerName: row.customer_name,
+      customerName: formatCustomerName(row.customer_name || ''),
       customerPhone: row.customer_phone,
       date: row.date,
     }))

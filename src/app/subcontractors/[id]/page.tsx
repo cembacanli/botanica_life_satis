@@ -12,8 +12,18 @@ interface Subcontractor {
   contractDate: string
   workDurationDays: number
   contractAmount: number
+  contractItems?: ContractItem[]
   phone?: string
   note?: string
+}
+
+interface ContractItem {
+  id: string
+  name: string
+  unit: string
+  estimatedQuantity: number
+  unitPrice: number
+  amount: number
 }
 
 interface SubcontractorClaim {
@@ -94,7 +104,7 @@ export default function SubcontractorDetailPage() {
   }, [subcontractorId])
 
   const handleSaveClaim = async (data: SubcontractorClaimFormData) => {
-    if (!subcontractor) throw new Error('Taseron bulunamadi.')
+    if (!subcontractor) throw new Error('Taşeron bulunamadı.')
     const contractAmount = Number(subcontractor.contractAmount || 0)
     const progressAmount = Number(data.previousPaidAmount || 0) + Number(data.currentClaimAmount || 0)
     const progressPercent =
@@ -103,7 +113,7 @@ export default function SubcontractorDetailPage() {
     const payload = {
       subcontractorId: subcontractor.id,
       subcontractorName: subcontractor.name,
-      workItem: subcontractor.workScope || subcontractor.name,
+      workItem: data.workItem || subcontractor.workScope || subcontractor.name,
       contractAmount,
       progressPercent,
       ...data,
@@ -121,7 +131,7 @@ export default function SubcontractorDetailPage() {
 
     const json = await response.json()
     if (!response.ok) {
-      throw new Error(json?.error || 'Hakedis kaydedilemedi.')
+      throw new Error(json?.error || 'Hakediş kaydedilemedi.')
     }
 
     if (isEdit) {
@@ -188,7 +198,7 @@ export default function SubcontractorDetailPage() {
     }).format(value || 0)
 
   if (!mounted || loading) {
-    return <div className="min-h-screen p-8">Yukleniyor...</div>
+    return <div className="min-h-screen p-8">Yükleniyor...</div>
   }
 
   return (
@@ -197,14 +207,14 @@ export default function SubcontractorDetailPage() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {subcontractor ? `${subcontractor.name} - Hakedis Sayfasi` : 'Taseron Hakedis Sayfasi'}
+              {subcontractor ? `${subcontractor.name} - Hakediş Sayfası` : 'Taşeron Hakediş Sayfası'}
             </h1>
             <div className="text-base text-gray-600">
-              {subcontractor ? subcontractor.workScope : 'Taseron bilgisi yukleniyor'}
+              {subcontractor ? subcontractor.workScope : 'Taşeron bilgisi yükleniyor'}
             </div>
             {subcontractor && (
               <div className="text-sm text-gray-500 mt-1">
-                Sozlesme: {subcontractor.contractDate} | Sure: {subcontractor.workDurationDays} gun | Tutar:{' '}
+                Sözleşme: {subcontractor.contractDate} | Süre: {subcontractor.workDurationDays} gün | Tutar:{' '}
                 {new Intl.NumberFormat('tr-TR', {
                   style: 'currency',
                   currency: 'TRY',
@@ -216,10 +226,16 @@ export default function SubcontractorDetailPage() {
           </div>
           <div className="flex gap-2">
             <button
+              onClick={() => router.push('/contracts')}
+              className="px-5 py-2.5 text-base bg-slate-800 hover:bg-slate-900 text-white rounded"
+            >
+              Sözleşmeler
+            </button>
+            <button
               onClick={() => router.push('/subcontractors')}
               className="px-5 py-2.5 text-base bg-gray-200 hover:bg-gray-300 text-gray-800 rounded"
             >
-              Taseron Listesi
+              Taşeron Listesi
             </button>
             <button
               onClick={() => {
@@ -229,22 +245,22 @@ export default function SubcontractorDetailPage() {
               disabled={!subcontractor}
               className="px-5 py-2.5 text-base bg-teal-700 hover:bg-teal-800 text-white rounded disabled:opacity-50"
             >
-              Yeni Hakedis Ekle
+              Yeni Hakediş Ekle
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Hakedis</div>
+            <div className="text-base text-gray-600">Toplam Hakediş</div>
             <div className="text-3xl font-bold text-cyan-700 mt-1">{formatCurrency(totals.totalCurrentClaim)}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Net Odeme</div>
+            <div className="text-base text-gray-600">Toplam Net Ödeme</div>
             <div className="text-3xl font-bold text-teal-700 mt-1">{formatCurrency(totals.totalNetPayable)}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Odenen</div>
+            <div className="text-base text-gray-600">Ödenen</div>
             <div className="text-3xl font-bold text-green-700 mt-1">{formatCurrency(totals.totalPaid)}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
@@ -254,9 +270,9 @@ export default function SubcontractorDetailPage() {
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Hakedis Kayitlari</div>
+          <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Hakediş Kayıtları</div>
           {sortedClaims.length === 0 ? (
-            <div className="p-5 text-gray-500">Kayit yok</div>
+            <div className="p-5 text-gray-500">Kayıt yok</div>
           ) : (
             <div className="divide-y">
               {sortedClaims.map(item => (
@@ -269,11 +285,11 @@ export default function SubcontractorDetailPage() {
                       </span>
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
-                      Tarih: {item.claimDate} | Sozlesme: {formatCurrency(item.contractAmount)} | Ilerleme: %
+                      Tarih: {item.claimDate} | Sözleşme: {formatCurrency(item.contractAmount)} | İlerleme: %
                       {item.progressPercent}
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
-                      Onceki: {formatCurrency(item.previousPaidAmount)} | Bu hakedis: {formatCurrency(item.currentClaimAmount)}
+                      Önceki: {formatCurrency(item.previousPaidAmount)} | Bu hakediş: {formatCurrency(item.currentClaimAmount)}
                       {' | '}Kesinti: {formatCurrency(item.deductionAmount)} | Net: {formatCurrency(item.netPayableAmount)}
                     </div>
                     {item.note && <div className="text-sm text-gray-500 mt-1">{item.note}</div>}
@@ -285,9 +301,9 @@ export default function SubcontractorDetailPage() {
                         setModalOpen(true)
                       }}
                       className="px-4 py-2 text-sm rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
-                    >
-                      Duzenle
-                    </button>
+                      >
+                        Düzenle
+                      </button>
                     <button
                       onClick={() => handleDeleteClaim(item)}
                       className="px-4 py-2 text-sm rounded bg-red-100 text-red-700 hover:bg-red-200"
@@ -313,9 +329,10 @@ export default function SubcontractorDetailPage() {
         subcontractorName={subcontractor?.name || '-'}
         subcontractorWorkScope={subcontractor?.workScope || ''}
         subcontractorContractAmount={Number(subcontractor?.contractAmount || 0)}
+        contractItems={subcontractor?.contractItems || []}
         defaultPreviousPaidAmount={defaultPreviousPaidAmount}
-        title={editingClaim ? 'Hakedis Duzenle' : 'Yeni Hakedis Girisi'}
-        submitLabel={editingClaim ? 'Guncelle' : 'Kaydet'}
+        title={editingClaim ? 'Hakedişi Düzenle' : 'Yeni Hakediş Girişi'}
+        submitLabel={editingClaim ? 'Güncelle' : 'Kaydet'}
       />
     </div>
   )

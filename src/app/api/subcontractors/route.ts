@@ -13,12 +13,23 @@ interface SubcontractorPayload {
   contractAmount: number
   phone?: string
   note?: string
+  contractItems?: ContractItem[]
+}
+
+interface ContractItem {
+  id: string
+  name: string
+  unit: string
+  estimatedQuantity: number
+  unitPrice: number
+  amount: number
 }
 
 interface ContractMeta {
   contractDate: string
   workDurationDays: number
   contractAmount: number
+  contractItems?: ContractItem[]
 }
 
 interface NoteAnalysisResult {
@@ -52,9 +63,11 @@ function isContractColumnCacheError(error: any) {
   return (
     code === 'PGRST204' &&
     (message.includes('contract_amount') ||
+      message.includes('contract_items') ||
       message.includes('contract_date') ||
       message.includes('work_duration_days') ||
       message.includes('contractamount') ||
+      message.includes('contractitems') ||
       message.includes('contractdate') ||
       message.includes('workdurationdays'))
   )
@@ -203,13 +216,35 @@ function normalizeAndValidatePayload(body: SubcontractorPayload) {
   const workScope = String(body?.workScope || '').trim()
   const contractDate = String(body?.contractDate || '').trim()
   const workDurationDays = Math.round(Number(body?.workDurationDays || 0))
-  const contractAmount = Math.round(Number(body?.contractAmount || 0))
+  const contractItems = normalizeContractItems(body?.contractItems)
+  const contractItemsTotal = contractItems.reduce((sum, item) => sum + item.amount, 0)
+  const contractAmount = Math.round(Number(body?.contractAmount || contractItemsTotal || 0))
   const phone = String(body?.phone || '').trim()
   const note = String(body?.note || '').trim()
   if (!name || !workScope || !contractDate) return null
   if (!Number.isFinite(workDurationDays) || workDurationDays <= 0) return null
   if (!Number.isFinite(contractAmount) || contractAmount <= 0) return null
-  return { name, workScope, contractDate, workDurationDays, contractAmount, phone, note }
+  return { name, workScope, contractDate, workDurationDays, contractAmount, phone, note, contractItems }
+}
+
+function normalizeContractItems(items: any): ContractItem[] {
+  if (!Array.isArray(items)) return []
+
+  return items
+    .map((item, index) => {
+      const estimatedQuantity = Number(item?.estimatedQuantity || 0)
+      const unitPrice = Number(item?.unitPrice || 0)
+      const amount = Math.round(Number(item?.amount || estimatedQuantity * unitPrice || 0))
+      return {
+        id: String(item?.id || `item-${Date.now()}-${index}`),
+        name: String(item?.name || '').trim(),
+        unit: String(item?.unit || '').trim(),
+        estimatedQuantity: Number.isFinite(estimatedQuantity) && estimatedQuantity > 0 ? estimatedQuantity : 0,
+        unitPrice: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : 0,
+        amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+      }
+    })
+    .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0 && item.amount > 0)
 }
 
 function mapRow(row: any) {
@@ -217,6 +252,9 @@ function mapRow(row: any) {
   const contractDate = row.contract_date ?? row.contractDate ?? parsed.meta.contractDate ?? ''
   const workDurationDays = row.work_duration_days ?? row.workDurationDays ?? parsed.meta.workDurationDays ?? 0
   const contractAmount = row.contract_amount ?? row.contractAmount ?? parsed.meta.contractAmount ?? 0
+  const contractItems = Array.isArray(row.contract_items)
+    ? normalizeContractItems(row.contract_items)
+    : normalizeContractItems(parsed.meta.contractItems)
   return {
     id: row.id,
     name: row.name,
@@ -224,6 +262,7 @@ function mapRow(row: any) {
     contractDate,
     workDurationDays,
     contractAmount,
+    contractItems,
     phone: row.phone || '',
     note: parsed.userNote,
     createdAt: row.created_at,
@@ -262,6 +301,7 @@ export async function POST(request: NextRequest) {
       contract_date: payload.contractDate,
       work_duration_days: payload.workDurationDays,
       contract_amount: payload.contractAmount,
+      contract_items: payload.contractItems,
       phone: payload.phone,
       note: payload.note,
       created_at: new Date().toISOString(),
@@ -273,6 +313,7 @@ export async function POST(request: NextRequest) {
       contractDate: payload.contractDate,
       workDurationDays: payload.workDurationDays,
       contractAmount: payload.contractAmount,
+      contractItems: payload.contractItems,
       phone: payload.phone,
       note: payload.note,
       created_at: new Date().toISOString(),
@@ -286,6 +327,7 @@ export async function POST(request: NextRequest) {
         contractDate: payload.contractDate,
         workDurationDays: payload.workDurationDays,
         contractAmount: payload.contractAmount,
+        contractItems: payload.contractItems,
       }),
       created_at: new Date().toISOString(),
     }
@@ -343,6 +385,7 @@ export async function PUT(request: NextRequest) {
       contract_date: payload.contractDate,
       work_duration_days: payload.workDurationDays,
       contract_amount: payload.contractAmount,
+      contract_items: payload.contractItems,
       phone: payload.phone,
       note: payload.note,
     }
@@ -353,6 +396,7 @@ export async function PUT(request: NextRequest) {
       contractDate: payload.contractDate,
       workDurationDays: payload.workDurationDays,
       contractAmount: payload.contractAmount,
+      contractItems: payload.contractItems,
       phone: payload.phone,
       note: payload.note,
     }
@@ -365,6 +409,7 @@ export async function PUT(request: NextRequest) {
         contractDate: payload.contractDate,
         workDurationDays: payload.workDurationDays,
         contractAmount: payload.contractAmount,
+        contractItems: payload.contractItems,
       }),
     }
 

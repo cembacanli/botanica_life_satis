@@ -5,10 +5,10 @@ import { ClaimStatus } from '@/lib/subcontractor-claims-store'
 
 export interface SubcontractorClaimFormData {
   workItem?: string
-  claimQuantity?: number
-  previousPaidAmount: number
-  currentClaimAmount: number
-  deductionAmount: number
+  claimQuantity?: number | string
+  previousPaidAmount: number | string
+  currentClaimAmount: number | string
+  deductionAmount: number | string
   claimDate: string
   status: ClaimStatus
   note?: string
@@ -64,9 +64,42 @@ export default function SubcontractorClaimModal({
   const [formData, setFormData] = useState<SubcontractorClaimFormData>(defaultData)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [initializedOpen, setInitializedOpen] = useState(false)
+
+  const parseDecimalInput = (value: unknown) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0
+    }
+
+    const raw = String(value || '').trim()
+    if (!raw) return 0
+
+    const normalized = raw.includes(',')
+      ? raw.replace(/\s+/g, '').replace(/\./g, '').replace(',', '.')
+      : raw.replace(/\s+/g, '').replace(/,/g, '')
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+  }
+
+  const sanitizeDecimalInput = (value: string) => value.replace(/[^\d.,]/g, '')
+
+  const formatDecimalInput = (value: unknown) => {
+    const parsed = parseDecimalInput(value)
+    return parsed > 0
+      ? new Intl.NumberFormat('tr-TR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(parsed)
+      : ''
+  }
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      setInitializedOpen(false)
+      return
+    }
+    if (initializedOpen) return
+
     if (initialData) {
       setFormData({
         workItem: initialData.workItem || '',
@@ -85,7 +118,8 @@ export default function SubcontractorClaimModal({
         previousPaidAmount: Math.max(Math.round(defaultPreviousPaidAmount || 0), 0),
       })
     }
-  }, [isOpen, initialData, defaultPreviousPaidAmount, contractItems, subcontractorWorkScope])
+    setInitializedOpen(true)
+  }, [isOpen, initializedOpen, initialData, defaultPreviousPaidAmount, contractItems, subcontractorWorkScope])
 
   const selectedContractItem = useMemo(
     () => contractItems.find(item => item.name === formData.workItem) || null,
@@ -94,7 +128,7 @@ export default function SubcontractorClaimModal({
 
   const progressPercent = useMemo(() => {
     if (!subcontractorContractAmount || subcontractorContractAmount <= 0) return 0
-    const progressAmount = Number(formData.previousPaidAmount || 0) + Number(formData.currentClaimAmount || 0)
+    const progressAmount = parseDecimalInput(formData.previousPaidAmount) + parseDecimalInput(formData.currentClaimAmount)
     const ratio = (progressAmount / subcontractorContractAmount) * 100
     return Math.min(Math.max(Number(ratio.toFixed(2)), 0), 100)
   }, [formData.previousPaidAmount, formData.currentClaimAmount, subcontractorContractAmount])
@@ -105,7 +139,7 @@ export default function SubcontractorClaimModal({
   )
 
   const netPayableAmount = useMemo(
-    () => Math.max(Number(formData.currentClaimAmount || 0) - Number(formData.deductionAmount || 0), 0),
+    () => Math.max(parseDecimalInput(formData.currentClaimAmount) - parseDecimalInput(formData.deductionAmount), 0),
     [formData.currentClaimAmount, formData.deductionAmount]
   )
 
@@ -124,7 +158,8 @@ export default function SubcontractorClaimModal({
       setError('Taşeron sözleşme tutarı bulunamadı.')
       return
     }
-    if (!formData.currentClaimAmount || formData.currentClaimAmount <= 0) {
+    const currentClaimAmount = parseDecimalInput(formData.currentClaimAmount)
+    if (!currentClaimAmount || currentClaimAmount <= 0) {
       setError('Bu hakediş tutarı 0 dan büyük olmalıdır.')
       return
     }
@@ -137,15 +172,15 @@ export default function SubcontractorClaimModal({
     try {
       await onSave({
         workItem: (formData.workItem || subcontractorWorkScope || subcontractorName).trim(),
-        claimQuantity: Number(formData.claimQuantity || 0),
-        previousPaidAmount: Math.max(Math.round(formData.previousPaidAmount || 0), 0),
-        currentClaimAmount: Number(Number(formData.currentClaimAmount || 0).toFixed(2)),
-        deductionAmount: Math.max(Math.round(formData.deductionAmount || 0), 0),
+        claimQuantity: parseDecimalInput(formData.claimQuantity),
+        previousPaidAmount: Number(parseDecimalInput(formData.previousPaidAmount).toFixed(2)),
+        currentClaimAmount: Number(currentClaimAmount.toFixed(2)),
+        deductionAmount: Number(parseDecimalInput(formData.deductionAmount).toFixed(2)),
         claimDate: formData.claimDate,
         status: formData.status,
         note: [
-          selectedContractItem && formData.claimQuantity
-            ? `[Sözleşme Kalemi] ${selectedContractItem.name} | Miktar: ${formData.claimQuantity} ${selectedContractItem.unit} | Birim Fiyat: ${formatCurrency(selectedContractItem.unitPrice)}`
+          selectedContractItem && parseDecimalInput(formData.claimQuantity)
+            ? `[Sözleşme Kalemi] ${selectedContractItem.name} | Miktar: ${parseDecimalInput(formData.claimQuantity)} ${selectedContractItem.unit} | Birim Fiyat: ${formatCurrency(selectedContractItem.unitPrice)}`
             : '',
           (formData.note || '').trim(),
         ]
@@ -226,7 +261,7 @@ export default function SubcontractorClaimModal({
                 onChange={e => {
                   const selectedName = e.target.value
                   const selected = contractItems.find(item => item.name === selectedName)
-                  const nextQuantity = Number(formData.claimQuantity || 0)
+                  const nextQuantity = parseDecimalInput(formData.claimQuantity)
                   setFormData(prev => ({
                     ...prev,
                     workItem: selectedName,
@@ -251,18 +286,19 @@ export default function SubcontractorClaimModal({
             <div>
               <label className="block text-sm text-gray-700 mb-1">Bu Hakediş Miktarı</label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.claimQuantity || ''}
+                type="text"
+                inputMode="decimal"
+                value={formData.claimQuantity ?? ''}
                 onChange={e => {
-                  const quantity = Number(e.target.value || 0)
+                  const rawQuantity = sanitizeDecimalInput(e.target.value)
+                  const quantity = parseDecimalInput(rawQuantity)
                   setFormData(prev => ({
                     ...prev,
-                    claimQuantity: quantity,
+                    claimQuantity: rawQuantity,
                     currentClaimAmount: selectedContractItem ? Number((quantity * selectedContractItem.unitPrice).toFixed(2)) : prev.currentClaimAmount,
                   }))
                 }}
+                onBlur={() => setFormData(prev => ({ ...prev, claimQuantity: formatDecimalInput(prev.claimQuantity) }))}
                 className="w-full px-3 py-2 border rounded bg-white"
                 placeholder="0"
               />
@@ -281,10 +317,11 @@ export default function SubcontractorClaimModal({
             <div>
               <label className="block text-sm text-gray-700 mb-1">Önceki Ödeme (TL)</label>
               <input
-                type="number"
-                min="0"
-                value={formData.previousPaidAmount || ''}
-                onChange={e => setFormData(prev => ({ ...prev, previousPaidAmount: parseInt(e.target.value, 10) || 0 }))}
+                type="text"
+                inputMode="decimal"
+                value={formData.previousPaidAmount ?? ''}
+                onChange={e => setFormData(prev => ({ ...prev, previousPaidAmount: sanitizeDecimalInput(e.target.value) }))}
+                onBlur={() => setFormData(prev => ({ ...prev, previousPaidAmount: formatDecimalInput(prev.previousPaidAmount) }))}
                 className="w-full px-3 py-2 border rounded"
                 placeholder="0"
               />
@@ -292,11 +329,11 @@ export default function SubcontractorClaimModal({
             <div>
               <label className="block text-sm text-gray-700 mb-1">Bu Hakediş (TL)</label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.currentClaimAmount || ''}
-                onChange={e => setFormData(prev => ({ ...prev, currentClaimAmount: Number(e.target.value || 0) }))}
+                type="text"
+                inputMode="decimal"
+                value={formData.currentClaimAmount ?? ''}
+                onChange={e => setFormData(prev => ({ ...prev, currentClaimAmount: sanitizeDecimalInput(e.target.value) }))}
+                onBlur={() => setFormData(prev => ({ ...prev, currentClaimAmount: formatDecimalInput(prev.currentClaimAmount) }))}
                 className="w-full px-3 py-2 border rounded"
                 placeholder="0"
               />
@@ -304,10 +341,11 @@ export default function SubcontractorClaimModal({
             <div>
               <label className="block text-sm text-gray-700 mb-1">Kesinti (TL)</label>
               <input
-                type="number"
-                min="0"
-                value={formData.deductionAmount || ''}
-                onChange={e => setFormData(prev => ({ ...prev, deductionAmount: parseInt(e.target.value, 10) || 0 }))}
+                type="text"
+                inputMode="decimal"
+                value={formData.deductionAmount ?? ''}
+                onChange={e => setFormData(prev => ({ ...prev, deductionAmount: sanitizeDecimalInput(e.target.value) }))}
+                onBlur={() => setFormData(prev => ({ ...prev, deductionAmount: formatDecimalInput(prev.deductionAmount) }))}
                 className="w-full px-3 py-2 border rounded"
                 placeholder="0"
               />

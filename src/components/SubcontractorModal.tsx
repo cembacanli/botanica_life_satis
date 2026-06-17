@@ -10,6 +10,8 @@ export interface SubcontractorFormData {
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
+  paymentSchedule?: PaymentScheduleItem[]
+  barterItems?: BarterItem[]
   phone?: string
   note?: string
 }
@@ -18,9 +20,24 @@ export interface ContractItem {
   id: string
   name: string
   unit: string
-  estimatedQuantity: number
-  unitPrice: number
+  estimatedQuantity: number | string
+  unitPrice: number | string
   amount: number
+}
+
+export interface PaymentScheduleItem {
+  id: string
+  paymentDate: string
+  amount: number | string
+  note?: string
+}
+
+export interface BarterItem {
+  id: string
+  block: string
+  apartmentNo: string
+  amount: number | string
+  note?: string
 }
 
 interface SubcontractorModalProps {
@@ -40,6 +57,8 @@ const defaultData = (): SubcontractorFormData => ({
   workDurationDays: 0,
   contractAmount: 0,
   contractItems: [],
+  paymentSchedule: [],
+  barterItems: [],
   phone: '',
   note: '',
 })
@@ -53,6 +72,21 @@ const emptyContractItem = (): ContractItem => ({
   amount: 0,
 })
 
+const emptyPaymentScheduleItem = (): PaymentScheduleItem => ({
+  id: `payment-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  paymentDate: new Date().toISOString().slice(0, 10),
+  amount: 0,
+  note: '',
+})
+
+const emptyBarterItem = (): BarterItem => ({
+  id: `barter-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  block: '',
+  apartmentNo: '',
+  amount: 0,
+  note: '',
+})
+
 export default function SubcontractorModal({
   isOpen,
   onClose,
@@ -63,6 +97,8 @@ export default function SubcontractorModal({
 }: SubcontractorModalProps) {
   const [formData, setFormData] = useState<SubcontractorFormData>(defaultData)
   const [contractItems, setContractItems] = useState<ContractItem[]>([emptyContractItem()])
+  const [paymentSchedule, setPaymentSchedule] = useState<PaymentScheduleItem[]>([emptyPaymentScheduleItem()])
+  const [barterItems, setBarterItems] = useState<BarterItem[]>([emptyBarterItem()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -87,6 +123,35 @@ export default function SubcontractorModal({
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }
 
+  const sanitizeDecimalInput = (value: string) => {
+    return value.replace(/[^\d.,]/g, '')
+  }
+
+  const formatDecimalInput = (value: unknown) => {
+    const parsed = parseDecimalInput(value)
+    return parsed > 0
+      ? new Intl.NumberFormat('tr-TR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(parsed)
+      : ''
+  }
+
+  const normalizeDateInput = (value: string) => {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) return value
+
+    const year = Number(match[1])
+    const month = Number(match[2])
+    const day = Number(match[3])
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return value
+    if (month < 1 || month > 12 || day < 1) return value
+
+    const lastDayOfMonth = new Date(year, month, 0).getDate()
+    const safeDay = Math.min(day, lastDayOfMonth)
+    return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
+  }
+
   const normalizeItems = (items: ContractItem[]) =>
     items
       .map(item => {
@@ -104,9 +169,34 @@ export default function SubcontractorModal({
       })
       .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0)
 
+  const normalizePaymentSchedule = (items: PaymentScheduleItem[]) =>
+    items
+      .map(item => ({
+        ...item,
+        paymentDate: String(item.paymentDate || '').trim(),
+        amount: Number(parseDecimalInput(item.amount).toFixed(2)),
+        note: String(item.note || '').trim(),
+      }))
+      .filter(item => item.paymentDate && item.amount > 0)
+
+  const normalizeBarterItems = (items: BarterItem[]) =>
+    items
+      .map(item => ({
+        ...item,
+        block: String(item.block || '').trim().toUpperCase(),
+        apartmentNo: String(item.apartmentNo || '').trim(),
+        amount: Number(parseDecimalInput(item.amount).toFixed(2)),
+        note: String(item.note || '').trim(),
+      }))
+      .filter(item => item.block && item.apartmentNo && item.amount > 0)
+
   const normalizedContractItems = useMemo(() => normalizeItems(contractItems), [contractItems])
+  const normalizedPaymentSchedule = useMemo(() => normalizePaymentSchedule(paymentSchedule), [paymentSchedule])
+  const normalizedBarterItems = useMemo(() => normalizeBarterItems(barterItems), [barterItems])
 
   const contractItemsTotal = normalizedContractItems.reduce((sum, item) => sum + item.amount, 0)
+  const paymentScheduleTotal = normalizedPaymentSchedule.reduce((sum, item) => sum + item.amount, 0)
+  const barterItemsTotal = normalizedBarterItems.reduce((sum, item) => sum + item.amount, 0)
 
   const updateContractItem = (id: string, patch: Partial<ContractItem>) => {
     setContractItems(prev =>
@@ -126,6 +216,28 @@ export default function SubcontractorModal({
     })
   }
 
+  const updatePaymentScheduleItem = (id: string, patch: Partial<PaymentScheduleItem>) => {
+    setPaymentSchedule(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  const removePaymentScheduleItem = (id: string) => {
+    setPaymentSchedule(prev => {
+      const next = prev.filter(item => item.id !== id)
+      return next.length > 0 ? next : [emptyPaymentScheduleItem()]
+    })
+  }
+
+  const updateBarterItem = (id: string, patch: Partial<BarterItem>) => {
+    setBarterItems(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  const removeBarterItem = (id: string) => {
+    setBarterItems(prev => {
+      const next = prev.filter(item => item.id !== id)
+      return next.length > 0 ? next : [emptyBarterItem()]
+    })
+  }
+
   useEffect(() => {
     if (!isOpen) return
     if (initialData) {
@@ -137,6 +249,8 @@ export default function SubcontractorModal({
         workDurationDays: Number(initialData.workDurationDays || 0),
         contractAmount: Number(initialData.contractAmount || 0),
         contractItems: Array.isArray(initialData.contractItems) ? initialData.contractItems : [],
+        paymentSchedule: Array.isArray(initialData.paymentSchedule) ? initialData.paymentSchedule : [],
+        barterItems: Array.isArray(initialData.barterItems) ? initialData.barterItems : [],
         phone: initialData.phone || '',
         note: initialData.note || '',
       })
@@ -144,9 +258,21 @@ export default function SubcontractorModal({
         ? initialData.contractItems
         : [emptyContractItem()]
       setContractItems(initialItems)
+      setPaymentSchedule(
+        Array.isArray(initialData.paymentSchedule) && initialData.paymentSchedule.length > 0
+          ? initialData.paymentSchedule
+          : [emptyPaymentScheduleItem()]
+      )
+      setBarterItems(
+        Array.isArray(initialData.barterItems) && initialData.barterItems.length > 0
+          ? initialData.barterItems
+          : [emptyBarterItem()]
+      )
     } else {
       setFormData(defaultData())
       setContractItems([emptyContractItem()])
+      setPaymentSchedule([emptyPaymentScheduleItem()])
+      setBarterItems([emptyBarterItem()])
     }
   }, [isOpen, initialData])
 
@@ -156,6 +282,9 @@ export default function SubcontractorModal({
     if (saving) return
     setError('')
     setFormData(defaultData())
+    setContractItems([emptyContractItem()])
+    setPaymentSchedule([emptyPaymentScheduleItem()])
+    setBarterItems([emptyBarterItem()])
     onClose()
   }
 
@@ -183,6 +312,8 @@ export default function SubcontractorModal({
     }
     const finalContractItems = normalizedContractItems
     const finalContractAmount = contractItemsTotal
+    const finalPaymentSchedule = normalizedPaymentSchedule
+    const finalBarterItems = normalizedBarterItems
 
     if (!finalContractAmount || finalContractAmount <= 0) {
       setError('Sözleşme tutarı için iş kalemi, birim, takribi miktar ve birim fiyat alanlarını doldurun.')
@@ -199,6 +330,8 @@ export default function SubcontractorModal({
         workDurationDays: Math.round(formData.workDurationDays || 0),
         contractAmount: Number(finalContractAmount.toFixed(2)),
         contractItems: finalContractItems,
+        paymentSchedule: finalPaymentSchedule,
+        barterItems: finalBarterItems,
         phone: (formData.phone || '').trim(),
         note: (formData.note || '').trim(),
       })
@@ -328,9 +461,10 @@ export default function SubcontractorModal({
                         type="text"
                         inputMode="decimal"
                         value={item.estimatedQuantity || ''}
-                        onChange={e => updateContractItem(item.id, { estimatedQuantity: parseDecimalInput(e.target.value) })}
+                        onChange={e => updateContractItem(item.id, { estimatedQuantity: sanitizeDecimalInput(e.target.value) })}
+                        onBlur={() => updateContractItem(item.id, { estimatedQuantity: formatDecimalInput(item.estimatedQuantity) })}
                         className="w-full rounded border px-3 py-2 text-sm"
-                        placeholder="0"
+                        placeholder="0,00"
                       />
                     </div>
                     <div>
@@ -339,9 +473,10 @@ export default function SubcontractorModal({
                         type="text"
                         inputMode="decimal"
                         value={item.unitPrice || ''}
-                        onChange={e => updateContractItem(item.id, { unitPrice: parseDecimalInput(e.target.value) })}
+                        onChange={e => updateContractItem(item.id, { unitPrice: sanitizeDecimalInput(e.target.value) })}
+                        onBlur={() => updateContractItem(item.id, { unitPrice: formatDecimalInput(item.unitPrice) })}
                         className="w-full rounded border px-3 py-2 text-sm"
-                        placeholder="0"
+                        placeholder="0,00"
                       />
                     </div>
                     <div>
@@ -368,6 +503,156 @@ export default function SubcontractorModal({
             <div className="mt-3 flex justify-end text-sm">
               <div className="rounded bg-gray-900 px-4 py-2 font-semibold text-white">
                 İş kalemleri toplamı: {formatAmountTr(contractItemsTotal)} TL
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Ödeme Planı</div>
+                  <div className="text-xs text-gray-600">Taksit tarihi, tutarı ve kısa açıklamasını girin.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPaymentSchedule(prev => [...prev, emptyPaymentScheduleItem()])}
+                  className="rounded bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+                >
+                  Taksit Ekle
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {paymentSchedule.map(item => (
+                  <div key={item.id} className="grid grid-cols-1 gap-3 rounded border border-emerald-100 bg-white p-3 md:grid-cols-[180px_180px_minmax(260px,1fr)_52px]">
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Ödeme Tarihi</label>
+                      <input
+                        type="date"
+                        value={item.paymentDate}
+                        onChange={e => updatePaymentScheduleItem(item.id, { paymentDate: normalizeDateInput(e.target.value) })}
+                        onBlur={() => updatePaymentScheduleItem(item.id, { paymentDate: normalizeDateInput(item.paymentDate) })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Tutar</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={item.amount || ''}
+                        onChange={e => updatePaymentScheduleItem(item.id, { amount: sanitizeDecimalInput(e.target.value) })}
+                        onBlur={() => updatePaymentScheduleItem(item.id, { amount: formatDecimalInput(item.amount) })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Açıklama</label>
+                      <input
+                        value={item.note || ''}
+                        onChange={e => updatePaymentScheduleItem(item.id, { note: e.target.value })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="Örn: 1. taksit"
+                      />
+                    </div>
+                    <div className="flex items-end justify-end md:justify-start">
+                      <button
+                        type="button"
+                        onClick={() => removePaymentScheduleItem(item.id)}
+                        className="h-10 w-10 rounded bg-red-50 text-sm font-semibold text-red-700 hover:bg-red-100"
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 text-right text-sm font-semibold text-emerald-900">
+                Ödeme planı toplamı: {formatAmountTr(paymentScheduleTotal)} TL
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Barter Daireleri</div>
+                  <div className="text-xs text-gray-600">Daire no ve tutar girilince dashboard satış kaydı oluşur.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBarterItems(prev => [...prev, emptyBarterItem()])}
+                  className="rounded bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800"
+                >
+                  Daire Ekle
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {barterItems.map(item => (
+                  <div key={item.id} className="grid grid-cols-1 gap-3 rounded border border-amber-100 bg-white p-3 md:grid-cols-[110px_140px_180px_minmax(260px,1fr)_52px]">
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Blok</label>
+                      <select
+                        value={item.block || ''}
+                        onChange={e => updateBarterItem(item.id, { block: e.target.value })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                      >
+                        <option value="">Seç</option>
+                        {['A', 'B', 'C', 'D'].map(block => (
+                          <option key={block} value={block}>
+                            {block}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Daire No</label>
+                      <input
+                        value={item.apartmentNo}
+                        onChange={e => updateBarterItem(item.id, { apartmentNo: e.target.value })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="Örn: 64"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Barter Tutarı</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={item.amount || ''}
+                        onChange={e => updateBarterItem(item.id, { amount: sanitizeDecimalInput(e.target.value) })}
+                        onBlur={() => updateBarterItem(item.id, { amount: formatDecimalInput(item.amount) })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-600">Açıklama</label>
+                      <input
+                        value={item.note || ''}
+                        onChange={e => updateBarterItem(item.id, { note: e.target.value })}
+                        className="w-full rounded border px-3 py-2 text-sm"
+                        placeholder="Örn: barter satış"
+                      />
+                    </div>
+                    <div className="flex items-end justify-end md:justify-start">
+                      <button
+                        type="button"
+                        onClick={() => removeBarterItem(item.id)}
+                        className="h-10 w-10 rounded bg-red-50 text-sm font-semibold text-red-700 hover:bg-red-100"
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 text-right text-sm font-semibold text-amber-900">
+                Barter toplamı: {formatAmountTr(barterItemsTotal)} TL
               </div>
             </div>
           </div>

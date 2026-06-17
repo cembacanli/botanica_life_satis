@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { formatCustomerName } from '@/lib/customer-name'
 
 const SUBCONTRACTORS_TABLE = 'subcontractors'
 const SUBCONTRACTOR_CLAIMS_TABLE = 'subcontractor_claims'
@@ -15,15 +16,32 @@ interface SubcontractorPayload {
   phone?: string
   note?: string
   contractItems?: ContractItem[]
+  paymentSchedule?: PaymentScheduleItem[]
+  barterItems?: BarterItem[]
 }
 
 interface ContractItem {
   id: string
   name: string
   unit: string
-  estimatedQuantity: number
-  unitPrice: number
+  estimatedQuantity: number | string
+  unitPrice: number | string
   amount: number
+}
+
+interface PaymentScheduleItem {
+  id: string
+  paymentDate: string
+  amount: number | string
+  note?: string
+}
+
+interface BarterItem {
+  id: string
+  block: string
+  apartmentNo: string
+  amount: number | string
+  note?: string
 }
 
 interface ContractMeta {
@@ -32,6 +50,8 @@ interface ContractMeta {
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
+  paymentSchedule?: PaymentScheduleItem[]
+  barterItems?: BarterItem[]
 }
 
 interface NoteAnalysisResult {
@@ -56,7 +76,7 @@ function isSubcontractorsTableMissing(error: any) {
 function getSchemaErrorMessage(tableName: string) {
   const url = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '')
   const projectRef = url.replace('https://', '').split('.')[0] || 'unknown'
-  return `Supabase schema eksik: ${tableName}. Gerekli kolonlar: contract_date, work_start_date, work_duration_days, contract_amount. Uygulamanin bagli oldugu project ref: ${projectRef}. Lutfen ayni projede supabase/subcontractor_module.sql dosyasini tekrar calistirin.`
+  return `Supabase schema eksik: ${tableName}. Gerekli kolonlar: contract_date, work_start_date, work_duration_days, contract_amount, contract_items, payment_schedule, barter_items. Uygulamanin bagli oldugu project ref: ${projectRef}. Lutfen ayni projede supabase/subcontractor_module.sql dosyasini tekrar calistirin.`
 }
 
 function isContractColumnCacheError(error: any) {
@@ -66,11 +86,15 @@ function isContractColumnCacheError(error: any) {
     code === 'PGRST204' &&
     (message.includes('contract_amount') ||
       message.includes('contract_items') ||
+      message.includes('payment_schedule') ||
+      message.includes('barter_items') ||
       message.includes('contract_date') ||
       message.includes('work_start_date') ||
       message.includes('work_duration_days') ||
       message.includes('contractamount') ||
       message.includes('contractitems') ||
+      message.includes('paymentschedule') ||
+      message.includes('barteritems') ||
       message.includes('contractdate') ||
       message.includes('workstartdate') ||
       message.includes('workdurationdays'))
@@ -186,6 +210,7 @@ function analyzeSubcontractorNote(note: string): NoteAnalysisResult {
 
 function applyNoteAnalysis(payload: ReturnType<typeof normalizeAndValidatePayload>) {
   if (!payload) return null
+  if (payload.barterItems.length > 0) return payload
 
   const cleanNote = sanitizeNoteForReanalysis(payload.note || '')
   const analysis = analyzeSubcontractorNote(cleanNote)
@@ -222,14 +247,28 @@ function normalizeAndValidatePayload(body: SubcontractorPayload) {
   const workStartDate = String(body?.workStartDate || contractDate || '').trim()
   const workDurationDays = Math.round(Number(body?.workDurationDays || 0))
   const contractItems = normalizeContractItems(body?.contractItems)
+  const paymentSchedule = normalizePaymentSchedule(body?.paymentSchedule)
+  const barterItems = normalizeBarterItems(body?.barterItems)
   const contractItemsTotal = contractItems.reduce((sum, item) => sum + item.amount, 0)
-  const contractAmount = Math.round(Number(contractItemsTotal || body?.contractAmount || 0))
+  const contractAmount = Number(Number(contractItemsTotal || body?.contractAmount || 0).toFixed(2))
   const phone = String(body?.phone || '').trim()
   const note = String(body?.note || '').trim()
   if (!name || !workScope || !contractDate || !workStartDate) return null
   if (!Number.isFinite(workDurationDays) || workDurationDays <= 0) return null
   if (!Number.isFinite(contractAmount) || contractAmount <= 0) return null
-  return { name, workScope, contractDate, workStartDate, workDurationDays, contractAmount, phone, note, contractItems }
+  return {
+    name,
+    workScope,
+    contractDate,
+    workStartDate,
+    workDurationDays,
+    contractAmount,
+    phone,
+    note,
+    contractItems,
+    paymentSchedule,
+    barterItems,
+  }
 }
 
 function normalizeContractItems(items: any): ContractItem[] {
@@ -252,6 +291,39 @@ function normalizeContractItems(items: any): ContractItem[] {
     .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0 && item.amount > 0)
 }
 
+function normalizePaymentSchedule(items: any): PaymentScheduleItem[] {
+  if (!Array.isArray(items)) return []
+
+  return items
+    .map((item, index) => {
+      const amount = Number(parseDecimalNumber(item?.amount).toFixed(2))
+      return {
+        id: String(item?.id || `payment-${Date.now()}-${index}`),
+        paymentDate: String(item?.paymentDate || item?.payment_date || '').trim(),
+        amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+        note: String(item?.note || '').trim(),
+      }
+    })
+    .filter(item => item.paymentDate && Number(item.amount) > 0)
+}
+
+function normalizeBarterItems(items: any): BarterItem[] {
+  if (!Array.isArray(items)) return []
+
+  return items
+    .map((item, index) => {
+      const amount = Number(parseDecimalNumber(item?.amount).toFixed(2))
+      return {
+        id: String(item?.id || `barter-${Date.now()}-${index}`),
+        block: String(item?.block || '').trim().toUpperCase(),
+        apartmentNo: String(item?.apartmentNo || item?.apartment_no || '').trim(),
+        amount: Number.isFinite(amount) && amount > 0 ? amount : 0,
+        note: String(item?.note || '').trim(),
+      }
+    })
+    .filter(item => item.block && item.apartmentNo && Number(item.amount) > 0)
+}
+
 function parseDecimalNumber(value: any): number {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : 0
@@ -267,6 +339,136 @@ function parseDecimalNumber(value: any): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
+async function syncBarterSales(payload: ReturnType<typeof normalizeAndValidatePayload>) {
+  if (!payload || payload.barterItems.length === 0) return
+
+  for (const item of payload.barterItems) {
+    const apartmentNumber = Number.parseInt(item.apartmentNo, 10)
+
+    const { data: apartment, error: apartmentError } = await supabase
+      .from('apartments')
+      .select('id, block, number')
+      .eq('block', item.block)
+      .eq('number', apartmentNumber)
+      .maybeSingle()
+
+    if (apartmentError) throw apartmentError
+    if (!apartment?.id) {
+      throw new Error(`Barter dairesi bulunamadi: Blok ${item.block}, Daire ${item.apartmentNo}`)
+    }
+
+    const saleDate = new Date().toISOString()
+    const customerName = formatCustomerName(`${payload.name} Barter`)
+
+    const { data: existingSale, error: existingSaleError } = await supabase
+      .from('sales')
+      .select('id, customer_name')
+      .eq('apartment_id', apartment.id)
+      .maybeSingle()
+
+    if (existingSaleError) throw existingSaleError
+
+    const saleRecord = {
+      apartment_id: apartment.id,
+      sale_type: 'sold',
+      customer_name: customerName,
+      customer_phone: payload.phone,
+      date: saleDate,
+    }
+
+    if (existingSale?.customer_name && existingSale.customer_name !== customerName) {
+      throw new Error(
+        `Barter satisi olusturulamadi: Blok ${item.block}, Daire ${item.apartmentNo} zaten ${existingSale.customer_name} adina kayitli.`
+      )
+    }
+
+    if (existingSale) {
+      const { error } = await supabase.from('sales').update(saleRecord).eq('apartment_id', apartment.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('sales').insert(saleRecord)
+      if (error) throw error
+    }
+
+    const saleDetailRecord = {
+      apartment_id: apartment.id,
+      deposit_amount: Number(item.amount),
+      sale_price: Number(item.amount),
+      installment_months: 0,
+      monthly_payment: 0,
+      payments: [],
+      remaining_balance: 0,
+      start_date: payload.contractDate,
+      payment_method: 'barter',
+      custom_schedule: [],
+      custom_schedule_dates: [],
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data: existingDetail, error: existingDetailError } = await supabase
+      .from('sale_details')
+      .select('id')
+      .eq('apartment_id', apartment.id)
+      .maybeSingle()
+
+    if (existingDetailError) throw existingDetailError
+
+    if (existingDetail) {
+      const { error } = await supabase.from('sale_details').update(saleDetailRecord).eq('apartment_id', apartment.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('sale_details').insert(saleDetailRecord)
+      if (error) throw error
+    }
+
+    await supabase.from('apartments').update({ status: 'sold' }).eq('id', apartment.id)
+  }
+}
+
+async function validateBarterSales(payload: ReturnType<typeof normalizeAndValidatePayload>) {
+  if (!payload || payload.barterItems.length === 0) return
+
+  for (const item of payload.barterItems) {
+    await assertBarterItemCanSync(payload, item)
+  }
+}
+
+async function assertBarterItemCanSync(payload: ReturnType<typeof normalizeAndValidatePayload>, item: BarterItem) {
+  if (!payload) return
+
+  const apartmentNumber = Number.parseInt(item.apartmentNo, 10)
+  if (!Number.isFinite(apartmentNumber) || apartmentNumber <= 0) {
+    throw new Error(`Barter daire no gecersiz: ${item.apartmentNo}`)
+  }
+
+  const { data: apartment, error: apartmentError } = await supabase
+    .from('apartments')
+    .select('id')
+    .eq('block', item.block)
+    .eq('number', apartmentNumber)
+    .maybeSingle()
+
+  if (apartmentError) throw apartmentError
+  if (!apartment?.id) {
+    throw new Error(`Barter dairesi bulunamadi: Blok ${item.block}, Daire ${item.apartmentNo}`)
+  }
+
+  const { data: existingSale, error: existingSaleError } = await supabase
+    .from('sales')
+    .select('customer_name')
+    .eq('apartment_id', apartment.id)
+    .maybeSingle()
+
+  if (existingSaleError) throw existingSaleError
+
+  const customerName = formatCustomerName(`${payload.name} Barter`)
+  if (existingSale?.customer_name && existingSale.customer_name !== customerName) {
+    throw new Error(
+      `Barter satisi olusturulamadi: Blok ${item.block}, Daire ${item.apartmentNo} zaten ${existingSale.customer_name} adina kayitli.`
+    )
+  }
+}
+
 function mapRow(row: any) {
   const parsed = parsePersistedNote(row.note)
   const contractDate = row.contract_date ?? row.contractDate ?? parsed.meta.contractDate ?? ''
@@ -276,6 +478,12 @@ function mapRow(row: any) {
   const rowContractItems = Array.isArray(row.contract_items) ? normalizeContractItems(row.contract_items) : []
   const metaContractItems = normalizeContractItems(parsed.meta.contractItems)
   const contractItems = rowContractItems.length > 0 ? rowContractItems : metaContractItems
+  const rowPaymentSchedule = Array.isArray(row.payment_schedule) ? normalizePaymentSchedule(row.payment_schedule) : []
+  const metaPaymentSchedule = normalizePaymentSchedule(parsed.meta.paymentSchedule)
+  const paymentSchedule = rowPaymentSchedule.length > 0 ? rowPaymentSchedule : metaPaymentSchedule
+  const rowBarterItems = Array.isArray(row.barter_items) ? normalizeBarterItems(row.barter_items) : []
+  const metaBarterItems = normalizeBarterItems(parsed.meta.barterItems)
+  const barterItems = rowBarterItems.length > 0 ? rowBarterItems : metaBarterItems
   const contractItemsTotal = contractItems.reduce((sum, item) => sum + item.amount, 0)
   const contractAmount = contractItemsTotal > 0 ? contractItemsTotal : persistedContractAmount
   return {
@@ -287,6 +495,8 @@ function mapRow(row: any) {
     workDurationDays,
     contractAmount,
     contractItems,
+    paymentSchedule,
+    barterItems,
     phone: row.phone || '',
     note: parsed.userNote,
     createdAt: row.created_at,
@@ -318,6 +528,7 @@ export async function POST(request: NextRequest) {
   try {
     const payload = applyNoteAnalysis(normalizeAndValidatePayload((await request.json()) as SubcontractorPayload))
     if (!payload) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    await validateBarterSales(payload)
 
     const insertPayload = {
       name: payload.name,
@@ -327,6 +538,8 @@ export async function POST(request: NextRequest) {
       work_duration_days: payload.workDurationDays,
       contract_amount: payload.contractAmount,
       contract_items: payload.contractItems,
+      payment_schedule: payload.paymentSchedule,
+      barter_items: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
       created_at: new Date().toISOString(),
@@ -340,6 +553,8 @@ export async function POST(request: NextRequest) {
       workDurationDays: payload.workDurationDays,
       contractAmount: payload.contractAmount,
       contractItems: payload.contractItems,
+      paymentSchedule: payload.paymentSchedule,
+      barterItems: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
       created_at: new Date().toISOString(),
@@ -355,6 +570,8 @@ export async function POST(request: NextRequest) {
         workDurationDays: payload.workDurationDays,
         contractAmount: payload.contractAmount,
         contractItems: payload.contractItems,
+        paymentSchedule: payload.paymentSchedule,
+        barterItems: payload.barterItems,
       }),
       created_at: new Date().toISOString(),
     }
@@ -382,6 +599,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    await syncBarterSales(payload)
+
     return NextResponse.json(mapRow(data))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Subcontractor create failed'
@@ -405,6 +624,7 @@ export async function PUT(request: NextRequest) {
 
     const payload = normalizeAndValidatePayload(body)
     if (!payload) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    await validateBarterSales(payload)
 
     const updatePayload = {
       name: payload.name,
@@ -414,6 +634,8 @@ export async function PUT(request: NextRequest) {
       work_duration_days: payload.workDurationDays,
       contract_amount: payload.contractAmount,
       contract_items: payload.contractItems,
+      payment_schedule: payload.paymentSchedule,
+      barter_items: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
     }
@@ -426,6 +648,8 @@ export async function PUT(request: NextRequest) {
       workDurationDays: payload.workDurationDays,
       contractAmount: payload.contractAmount,
       contractItems: payload.contractItems,
+      paymentSchedule: payload.paymentSchedule,
+      barterItems: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
     }
@@ -440,6 +664,8 @@ export async function PUT(request: NextRequest) {
         workDurationDays: payload.workDurationDays,
         contractAmount: payload.contractAmount,
         contractItems: payload.contractItems,
+        paymentSchedule: payload.paymentSchedule,
+        barterItems: payload.barterItems,
       }),
     }
 
@@ -478,6 +704,8 @@ export async function PUT(request: NextRequest) {
     if (!data || data.length === 0) {
       return NextResponse.json({ error: 'Kayit bulunamadi.' }, { status: 404 })
     }
+
+    await syncBarterSales(payload)
 
     return NextResponse.json(mapRow(data[0]))
   } catch (error) {

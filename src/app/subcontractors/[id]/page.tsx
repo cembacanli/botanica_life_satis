@@ -45,6 +45,15 @@ interface SubcontractorClaim {
   createdAt: string
 }
 
+interface CumulativeClaim extends SubcontractorClaim {
+  sequenceNo: number
+  cumulativeClaimAmount: number
+  cumulativeNetPayableAmount: number
+  cumulativeDeductionAmount: number
+  cumulativeProgressPercent: number
+  previousCumulativeClaimAmount: number
+}
+
 const statusStyles: Record<SubcontractorClaim['status'], string> = {
   taslak: 'bg-gray-100 text-gray-700',
   onaylandi: 'bg-amber-100 text-amber-800',
@@ -56,6 +65,13 @@ const statusLabels: Record<SubcontractorClaim['status'], string> = {
   onaylandi: 'Onaylandi',
   odendi: 'Odendi',
 }
+
+const toNumber = (value: unknown) => {
+  const parsed = Number(value || 0)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const getClaimTime = (item: SubcontractorClaim) => new Date(item.claimDate || item.createdAt || 0).getTime()
 
 export default function SubcontractorDetailPage() {
   const params = useParams<{ id: string }>()
@@ -107,7 +123,9 @@ export default function SubcontractorDetailPage() {
   const handleSaveClaim = async (data: SubcontractorClaimFormData) => {
     if (!subcontractor) throw new Error('Taşeron bulunamadı.')
     const contractAmount = Number(subcontractor.contractAmount || 0)
-    const progressAmount = Number(data.previousPaidAmount || 0) + Number(data.currentClaimAmount || 0)
+    const previousPaidAmount = Number(data.previousPaidAmount || defaultPreviousPaidAmount || 0)
+    const currentClaimAmount = Number(data.currentClaimAmount || 0)
+    const progressAmount = previousPaidAmount + currentClaimAmount
     const progressPercent =
       contractAmount > 0 ? Math.min(Math.max(Number(((progressAmount / contractAmount) * 100).toFixed(2)), 0), 100) : 0
 
@@ -118,6 +136,8 @@ export default function SubcontractorDetailPage() {
       contractAmount,
       progressPercent,
       ...data,
+      previousPaidAmount,
+      currentClaimAmount,
     }
 
     const isEdit = Boolean(editingClaim?.id)
@@ -164,31 +184,66 @@ export default function SubcontractorDetailPage() {
   }
 
   const totals = useMemo(() => {
-    const totalCurrentClaim = claims.reduce((sum, item) => sum + (item.currentClaimAmount || 0), 0)
-    const totalNetPayable = claims.reduce((sum, item) => sum + (item.netPayableAmount || 0), 0)
+    const totalCurrentClaim = claims.reduce((sum, item) => sum + toNumber(item.currentClaimAmount), 0)
+    const totalNetPayable = claims.reduce((sum, item) => sum + toNumber(item.netPayableAmount), 0)
     const totalPaid = claims
       .filter(item => item.status === 'odendi')
-      .reduce((sum, item) => sum + (item.netPayableAmount || 0), 0)
+      .reduce((sum, item) => sum + toNumber(item.netPayableAmount), 0)
     const totalPending = claims
       .filter(item => item.status !== 'odendi')
-      .reduce((sum, item) => sum + (item.netPayableAmount || 0), 0)
-    return { totalCurrentClaim, totalNetPayable, totalPaid, totalPending }
-  }, [claims])
+      .reduce((sum, item) => sum + toNumber(item.netPayableAmount), 0)
+    const contractAmount = toNumber(subcontractor?.contractAmount)
+    const cumulativeProgressPercent =
+      contractAmount > 0 ? Math.min(Number(((totalCurrentClaim / contractAmount) * 100).toFixed(2)), 100) : 0
+    return { totalCurrentClaim, totalNetPayable, totalPaid, totalPending, cumulativeProgressPercent }
+  }, [claims, subcontractor?.contractAmount])
+
+  const cumulativeClaims = useMemo<CumulativeClaim[]>(() => {
+    const contractAmount = toNumber(subcontractor?.contractAmount)
+    let cumulativeClaimAmount = 0
+    let cumulativeNetPayableAmount = 0
+    let cumulativeDeductionAmount = 0
+
+    return [...claims]
+      .sort((a, b) => {
+        const dateDiff = getClaimTime(a) - getClaimTime(b)
+        if (dateDiff !== 0) return dateDiff
+        return String(a.createdAt || '').localeCompare(String(b.createdAt || ''))
+      })
+      .map((item, index) => {
+        const previousCumulativeClaimAmount = cumulativeClaimAmount
+        cumulativeClaimAmount += toNumber(item.currentClaimAmount)
+        cumulativeNetPayableAmount += toNumber(item.netPayableAmount)
+        cumulativeDeductionAmount += toNumber(item.deductionAmount)
+
+        return {
+          ...item,
+          sequenceNo: index + 1,
+          previousCumulativeClaimAmount,
+          cumulativeClaimAmount,
+          cumulativeNetPayableAmount,
+          cumulativeDeductionAmount,
+          cumulativeProgressPercent:
+            contractAmount > 0 ? Math.min(Number(((cumulativeClaimAmount / contractAmount) * 100).toFixed(2)), 100) : 0,
+        }
+      })
+  }, [claims, subcontractor?.contractAmount])
 
   const sortedClaims = useMemo(
     () =>
-      [...claims].sort((a, b) => {
-        const aTime = new Date(a.claimDate || a.createdAt || 0).getTime()
-        const bTime = new Date(b.claimDate || b.createdAt || 0).getTime()
-        return bTime - aTime
+      [...cumulativeClaims].sort((a, b) => {
+        const dateDiff = getClaimTime(b) - getClaimTime(a)
+        if (dateDiff !== 0) return dateDiff
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
       }),
-    [claims]
+    [cumulativeClaims]
   )
 
   const defaultPreviousPaidAmount = useMemo(() => {
-    if (sortedClaims.length === 0) return 0
-    return Number(sortedClaims[0]?.currentClaimAmount || 0)
-  }, [sortedClaims])
+    if (!editingClaim) return totals.totalCurrentClaim
+    const found = cumulativeClaims.find(item => item.id === editingClaim.id)
+    return toNumber(found?.previousCumulativeClaimAmount)
+  }, [cumulativeClaims, editingClaim, totals.totalCurrentClaim])
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('tr-TR', {
@@ -251,10 +306,14 @@ export default function SubcontractorDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2 xl:grid-cols-5">
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Hakediş</div>
+            <div className="text-base text-gray-600">Kümülatif Hakediş</div>
             <div className="text-3xl font-bold text-cyan-700 mt-1">{formatCurrency(totals.totalCurrentClaim)}</div>
+          </div>
+          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+            <div className="text-base text-gray-600">Kümülatif İlerleme</div>
+            <div className="text-3xl font-bold text-slate-900 mt-1">%{totals.cumulativeProgressPercent.toFixed(2)}</div>
           </div>
           <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
             <div className="text-base text-gray-600">Toplam Net Ödeme</div>
@@ -285,13 +344,45 @@ export default function SubcontractorDetailPage() {
                         {statusLabels[item.status]}
                       </span>
                     </div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      Tarih: {item.claimDate} | Sözleşme: {formatCurrency(item.contractAmount)} | İlerleme: %
-                      {item.progressPercent}
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                      <div className="rounded-lg bg-slate-50 px-3 py-2">
+                        <div className="text-xs text-slate-500">Hakediş No</div>
+                        <div className="font-semibold text-slate-900">#{item.sequenceNo}</div>
+                      </div>
+                      <div className="rounded-lg bg-blue-50 px-3 py-2">
+                        <div className="text-xs text-blue-700">Önceki Toplam</div>
+                        <div className="font-semibold text-blue-900">{formatCurrency(item.previousCumulativeClaimAmount)}</div>
+                      </div>
+                      <div className="rounded-lg bg-cyan-50 px-3 py-2">
+                        <div className="text-xs text-cyan-700">Bu Hakediş</div>
+                        <div className="font-semibold text-cyan-900">{formatCurrency(item.currentClaimAmount)}</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 px-3 py-2">
+                        <div className="text-xs text-slate-500">Kümülatif Hakediş</div>
+                        <div className="font-semibold text-slate-900">{formatCurrency(item.cumulativeClaimAmount)}</div>
+                      </div>
+                      <div className="rounded-lg bg-indigo-50 px-3 py-2">
+                        <div className="text-xs text-indigo-700">Kümülatif İlerleme</div>
+                        <div className="font-semibold text-indigo-900">%{item.cumulativeProgressPercent.toFixed(2)}</div>
+                      </div>
+                      <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                        <div className="text-xs text-emerald-700">Kümülatif Net</div>
+                        <div className="font-bold text-emerald-800">{formatCurrency(item.cumulativeNetPayableAmount)}</div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      Önceki: {formatCurrency(item.previousPaidAmount)} | Bu hakediş: {formatCurrency(item.currentClaimAmount)}
-                      {' | '}Kesinti: {formatCurrency(item.deductionAmount)} | Net: {formatCurrency(item.netPayableAmount)}
+                    <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="rounded-lg bg-gray-50 px-3 py-2">
+                        <div className="text-xs text-gray-500">Sözleşme</div>
+                        <div className="font-semibold text-gray-900">{formatCurrency(item.contractAmount)}</div>
+                      </div>
+                      <div className="rounded-lg bg-rose-50 px-3 py-2">
+                        <div className="text-xs text-rose-600">Bu Hakediş Kesinti</div>
+                        <div className="font-semibold text-rose-700">{formatCurrency(item.deductionAmount)}</div>
+                      </div>
+                      <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                        <div className="text-xs text-emerald-700">Bu Hakediş Net</div>
+                        <div className="font-bold text-emerald-800">{formatCurrency(item.netPayableAmount)}</div>
+                      </div>
                     </div>
                     {item.note && <div className="text-sm text-gray-500 mt-1">{item.note}</div>}
                   </div>
@@ -326,7 +417,7 @@ export default function SubcontractorDetailPage() {
           setEditingClaim(null)
         }}
         onSave={handleSaveClaim}
-        initialData={editingClaim}
+        initialData={editingClaim ? { ...editingClaim, previousPaidAmount: defaultPreviousPaidAmount } : null}
         subcontractorName={subcontractor?.name || '-'}
         subcontractorWorkScope={subcontractor?.workScope || ''}
         subcontractorContractAmount={Number(subcontractor?.contractAmount || 0)}

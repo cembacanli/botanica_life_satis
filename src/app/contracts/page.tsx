@@ -978,7 +978,7 @@ export default function ContractsPage() {
                     <div className="mt-5 space-y-3">
                       {selectedContract.claims.map(claim => (
                         <div key={claim.id} className="rounded-3xl border border-slate-200 p-4">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="flex flex-col gap-4">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div className="text-base font-semibold text-slate-900">
@@ -998,44 +998,44 @@ export default function ContractsPage() {
                               ) : null}
                             </div>
 
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                            <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
                                 <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
                                   İlerleme
                                 </div>
-                                <div className="mt-1 text-sm font-semibold text-slate-900">
+                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
                                   %{Number(claim.progressPercent || 0).toFixed(1)}
                                 </div>
                               </div>
-                              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
                                 <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
                                   Önceki
                                 </div>
-                                <div className="mt-1 text-sm font-semibold text-slate-900">
+                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
                                   {formatCurrency(claim.previousPaidAmount)}
                                 </div>
                               </div>
-                              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
                                 <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
                                   Bu Hakediş
                                 </div>
-                                <div className="mt-1 text-sm font-semibold text-slate-900">
+                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
                                   {formatCurrency(claim.currentClaimAmount)}
                                 </div>
                               </div>
-                              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
                                 <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
                                   Kesinti
                                 </div>
-                                <div className="mt-1 text-sm font-semibold text-rose-700">
+                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-rose-700">
                                   {formatCurrency(claim.deductionAmount)}
                                 </div>
                               </div>
-                              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                              <div className="min-w-0 rounded-2xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-100">
                                 <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
                                   Net Ödeme
                                 </div>
-                                <div className="mt-1 text-sm font-semibold text-emerald-700">
+                                <div className="mt-1 whitespace-nowrap text-base font-bold text-emerald-700">
                                   {formatCurrency(claim.netPayableAmount)}
                                 </div>
                               </div>

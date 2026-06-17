@@ -200,12 +200,12 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4 md:p-8" style={{backgroundImage: 'url(/vaziyet.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}>
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-3 md:p-8" style={{backgroundImage: 'url(/vaziyet.jpeg)', backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'}}>
       <div className="absolute inset-0 bg-black/60 pointer-events-none"></div>
       <div className="w-full mx-auto px-0 md:max-w-7xl relative z-10">
         {/* Header */}
-        <div className="mb-12 text-center flex items-center justify-between">
-          <div className="flex-1">
+        <div className="mb-8 flex flex-wrap items-center justify-center gap-3 text-center lg:mb-12 lg:justify-between">
+          <div className="w-full lg:flex-1">
             <h1 className="text-2xl font-bold text-white mb-3">
               BOTANICA LIFE - DAİRE SATIŞ PROGRAMI
             </h1>
@@ -215,7 +215,7 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => router.push('/installments')}
-            className="ml-4 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-3 md:px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -229,7 +229,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => router.push('/reports')}
-            className="ml-4 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-3 md:px-6 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -243,7 +243,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => router.push('/costs')}
-            className="ml-4 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-3 md:px-6 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-3.866 0-7 1.343-7 3v4c0 1.657 3.134 3 7 3s7-1.343 7-3v-4c0-1.657-3.134-3-7-3zm0 0V5m0 3v3" />
@@ -253,7 +253,7 @@ export default function Dashboard() {
           {user?.role === 'admin' && (
             <button
               onClick={() => router.push('/construction-costs')}
-              className="ml-4 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-3 md:px-6 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -269,7 +269,7 @@ export default function Dashboard() {
           {user?.role === 'admin' && (
             <button
               onClick={() => router.push('/material-procurement')}
-              className="ml-4 px-6 py-3 bg-stone-700 hover:bg-stone-800 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-3 md:px-6 bg-stone-700 hover:bg-stone-800 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -284,7 +284,7 @@ export default function Dashboard() {
           )}
           <button
             onClick={() => router.push('/contracts')}
-            className="ml-4 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-3 md:px-6 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -298,7 +298,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => router.push('/plans')}
-            className="ml-4 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="px-4 py-3 md:px-6 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -310,11 +310,11 @@ export default function Dashboard() {
             </svg>
             Planlar
           </button>
-          <div className="flex gap-3 ml-4">
+          <div className="flex flex-wrap justify-center gap-3">
             {user?.role === 'admin' && (
               <button
                 onClick={() => router.push('/admin')}
-                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="px-4 py-3 md:px-6 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -329,7 +329,7 @@ export default function Dashboard() {
             )}
             <button
               onClick={handleLogout}
-              className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-3 md:px-6 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -351,8 +351,8 @@ export default function Dashboard() {
         )}
 
         {/* Site Plan */}
-        <div className="mb-12 -mx-8 px-4 flex justify-center">
-          <div className="w-full md:w-3/4 lg:w-2/3 bg-white/5 backdrop-blur-lg rounded-lg p-6 border border-white/10">
+        <div className="mb-8 flex justify-center md:mb-12">
+          <div className="w-full bg-white/5 backdrop-blur-lg rounded-lg p-3 border border-white/10 md:w-3/4 md:p-6 lg:w-2/3">
             <h2 className="text-lg md:text-2xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
             <div className="relative rounded-lg overflow-hidden shadow-2xl group bg-white/95">
               <img
@@ -411,21 +411,21 @@ export default function Dashboard() {
         </div>
 
         {/* İstatistikler */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <div className="text-3xl font-bold text-blue-400 mb-2">360</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8 md:mb-12">
+          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 md:p-6 border border-white/20">
+            <div className="text-2xl font-bold text-blue-400 mb-2 md:text-3xl">360</div>
             <div className="text-gray-300">Toplam Daire</div>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <div className="text-3xl font-bold text-green-400 mb-2">4</div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 md:p-6 border border-white/20">
+            <div className="text-2xl font-bold text-green-400 mb-2 md:text-3xl">4</div>
             <div className="text-gray-300">Blok</div>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <div className="text-3xl font-bold text-yellow-400 mb-2">10</div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 md:p-6 border border-white/20">
+            <div className="text-2xl font-bold text-yellow-400 mb-2 md:text-3xl">10</div>
             <div className="text-gray-300">Kat</div>
           </div>
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
-            <div className="text-xl md:text-2xl font-bold text-purple-400 mb-1">{potentialAmountFormatted}</div>
+          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 md:p-6 border border-white/20">
+            <div className="break-words text-lg font-bold text-purple-400 mb-1 md:text-2xl">{potentialAmountFormatted}</div>
             <div className="text-xs text-purple-200 mb-2">{potentialApartments.length} daire satisa acik</div>
             <div className="text-gray-300">Potansiyel</div>
           </div>
@@ -504,7 +504,7 @@ export default function Dashboard() {
           {/* Proje Toplamı Özet */}
           <div className="bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
             <h3 className="text-lg font-bold text-white mb-2">🏢 Proje Toplamı</h3>
-            <div className="flex items-center gap-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
               <div>
                 <div className="text-sm text-gray-300">Proje Toplam Satış Bedeli</div>
                 <div className="text-2xl font-bold text-cyan-300">
@@ -568,7 +568,7 @@ export default function Dashboard() {
         </div>
 
         {/* Bloklar - 1 Satır - 4 Kart */}
-        <div className="grid grid-cols-4 gap-2 mb-6">
+        <div className="grid grid-cols-2 gap-3 mb-6 md:grid-cols-4">
           {Object.entries(blocks).map(([key, block]) => (
             <button
               key={key}

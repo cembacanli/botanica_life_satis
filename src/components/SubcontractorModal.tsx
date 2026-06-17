@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 export interface SubcontractorFormData {
   name: string
@@ -104,9 +104,9 @@ export default function SubcontractorModal({
       })
       .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0)
 
-  const contractItemsTotal = contractItems.reduce((sum, item) => {
-    return sum + Number((parseDecimalInput(item.estimatedQuantity) * parseDecimalInput(item.unitPrice)).toFixed(2))
-  }, 0)
+  const normalizedContractItems = useMemo(() => normalizeItems(contractItems), [contractItems])
+
+  const contractItemsTotal = normalizedContractItems.reduce((sum, item) => sum + item.amount, 0)
 
   const updateContractItem = (id: string, patch: Partial<ContractItem>) => {
     setContractItems(prev =>
@@ -181,11 +181,11 @@ export default function SubcontractorModal({
       setError('İş süresi 0 dan büyük olmalıdır.')
       return
     }
-    const finalContractItems = normalizeItems(contractItems)
-    const finalContractAmount = finalContractItems.reduce((sum, item) => sum + item.amount, 0)
+    const finalContractItems = normalizedContractItems
+    const finalContractAmount = contractItemsTotal
 
     if (!finalContractAmount || finalContractAmount <= 0) {
-      setError('Sözleşme tutarı için en az bir geçerli iş kalemi girilmelidir.')
+      setError('Sözleşme tutarı için iş kalemi, birim, takribi miktar ve birim fiyat alanlarını doldurun.')
       return
     }
 

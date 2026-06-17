@@ -8,6 +8,7 @@ create table if not exists public.subcontractors (
   name text not null,
   work_scope text not null,
   contract_date date,
+  work_start_date date,
   work_duration_days integer,
   contract_amount bigint,
   contract_items jsonb not null default '[]'::jsonb,
@@ -18,17 +19,20 @@ create table if not exists public.subcontractors (
 
 alter table public.subcontractors
   add column if not exists contract_date date,
+  add column if not exists work_start_date date,
   add column if not exists work_duration_days integer,
   add column if not exists contract_amount bigint,
   add column if not exists contract_items jsonb not null default '[]'::jsonb;
 
 update public.subcontractors
 set contract_date = coalesce(contract_date, current_date),
+    work_start_date = coalesce(work_start_date, contract_date, current_date),
     work_duration_days = coalesce(work_duration_days, 1),
     contract_amount = coalesce(contract_amount, 1);
 
 alter table public.subcontractors
   alter column contract_date set not null,
+  alter column work_start_date set not null,
   alter column work_duration_days set not null,
   alter column contract_amount set not null;
 

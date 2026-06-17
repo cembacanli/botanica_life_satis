@@ -10,6 +10,7 @@ interface Subcontractor {
   name: string
   workScope: string
   contractDate: string
+  workStartDate?: string
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
@@ -214,7 +215,7 @@ export default function SubcontractorDetailPage() {
             </div>
             {subcontractor && (
               <div className="text-sm text-gray-500 mt-1">
-                Sözleşme: {subcontractor.contractDate} | Süre: {subcontractor.workDurationDays} gün | Tutar:{' '}
+                Sözleşme: {subcontractor.contractDate} | Başlama: {subcontractor.workStartDate || subcontractor.contractDate} | Süre: {subcontractor.workDurationDays} gün | Tutar:{' '}
                 {new Intl.NumberFormat('tr-TR', {
                   style: 'currency',
                   currency: 'TRY',

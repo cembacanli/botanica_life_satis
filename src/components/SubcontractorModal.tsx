@@ -6,6 +6,7 @@ export interface SubcontractorFormData {
   name: string
   workScope: string
   contractDate: string
+  workStartDate: string
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
@@ -35,6 +36,7 @@ const defaultData = (): SubcontractorFormData => ({
   name: '',
   workScope: '',
   contractDate: new Date().toISOString().slice(0, 10),
+  workStartDate: new Date().toISOString().slice(0, 10),
   workDurationDays: 0,
   contractAmount: 0,
   contractItems: [],
@@ -60,7 +62,6 @@ export default function SubcontractorModal({
   submitLabel = 'Kaydet',
 }: SubcontractorModalProps) {
   const [formData, setFormData] = useState<SubcontractorFormData>(defaultData)
-  const [contractAmountInput, setContractAmountInput] = useState('')
   const [contractItems, setContractItems] = useState<ContractItem[]>([emptyContractItem()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -71,34 +72,26 @@ export default function SubcontractorModal({
       maximumFractionDigits: 2,
     }).format(Number(amount || 0))
 
-  const parseAmountInput = (input: string) => {
-    const cleaned = String(input || '')
-      .replace(/\s+/g, '')
-      .replace(/[^\d,.-]/g, '')
+  const parseDecimalInput = (value: unknown) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0
+    }
 
-    if (!cleaned) return 0
+    const raw = String(value || '').trim()
+    if (!raw) return 0
 
-    const normalized = cleaned.includes(',')
-      ? cleaned.replace(/\./g, '').replace(',', '.')
-      : cleaned.replace(/\./g, '')
-
+    const normalized = raw.includes(',')
+      ? raw.replace(/\s+/g, '').replace(/\./g, '').replace(',', '.')
+      : raw.replace(/\s+/g, '').replace(/,/g, '')
     const parsed = Number(normalized)
-    if (!Number.isFinite(parsed) || parsed < 0) return 0
-    return parsed
-  }
-
-  const sanitizeAmountTyping = (input: string) => {
-    const cleaned = String(input || '').replace(/[^\d,.\s]/g, '')
-    const firstComma = cleaned.indexOf(',')
-    if (firstComma < 0) return cleaned
-    return `${cleaned.slice(0, firstComma + 1)}${cleaned.slice(firstComma + 1).replace(/,/g, '')}`
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }
 
   const normalizeItems = (items: ContractItem[]) =>
     items
       .map(item => {
-        const estimatedQuantity = Number(item.estimatedQuantity || 0)
-        const unitPrice = Number(item.unitPrice || 0)
+        const estimatedQuantity = parseDecimalInput(item.estimatedQuantity)
+        const unitPrice = parseDecimalInput(item.unitPrice)
         const amount = Number((estimatedQuantity * unitPrice).toFixed(2))
         return {
           ...item,
@@ -112,7 +105,7 @@ export default function SubcontractorModal({
       .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0)
 
   const contractItemsTotal = contractItems.reduce((sum, item) => {
-    return sum + Number((Number(item.estimatedQuantity || 0) * Number(item.unitPrice || 0)).toFixed(2))
+    return sum + Number((parseDecimalInput(item.estimatedQuantity) * parseDecimalInput(item.unitPrice)).toFixed(2))
   }, 0)
 
   const updateContractItem = (id: string, patch: Partial<ContractItem>) => {
@@ -120,7 +113,7 @@ export default function SubcontractorModal({
       prev.map(item => {
         if (item.id !== id) return item
         const next = { ...item, ...patch }
-        const amount = Number((Number(next.estimatedQuantity || 0) * Number(next.unitPrice || 0)).toFixed(2))
+        const amount = Number((parseDecimalInput(next.estimatedQuantity) * parseDecimalInput(next.unitPrice)).toFixed(2))
         return { ...next, amount }
       })
     )
@@ -140,6 +133,7 @@ export default function SubcontractorModal({
         name: initialData.name || '',
         workScope: initialData.workScope || '',
         contractDate: initialData.contractDate || new Date().toISOString().slice(0, 10),
+        workStartDate: initialData.workStartDate || initialData.contractDate || new Date().toISOString().slice(0, 10),
         workDurationDays: Number(initialData.workDurationDays || 0),
         contractAmount: Number(initialData.contractAmount || 0),
         contractItems: Array.isArray(initialData.contractItems) ? initialData.contractItems : [],
@@ -150,12 +144,8 @@ export default function SubcontractorModal({
         ? initialData.contractItems
         : [emptyContractItem()]
       setContractItems(initialItems)
-      setContractAmountInput(
-        Number(initialData.contractAmount || 0) > 0 ? formatAmountTr(Number(initialData.contractAmount || 0)) : ''
-      )
     } else {
       setFormData(defaultData())
-      setContractAmountInput('')
       setContractItems([emptyContractItem()])
     }
   }, [isOpen, initialData])
@@ -183,17 +173,19 @@ export default function SubcontractorModal({
       setError('Sözleşme tarihi zorunludur.')
       return
     }
+    if (!formData.workStartDate) {
+      setError('İşe başlama tarihi zorunludur.')
+      return
+    }
     if (!formData.workDurationDays || formData.workDurationDays <= 0) {
       setError('İş süresi 0 dan büyük olmalıdır.')
       return
     }
     const finalContractItems = normalizeItems(contractItems)
-    const finalContractAmount = finalContractItems.length > 0
-      ? finalContractItems.reduce((sum, item) => sum + item.amount, 0)
-      : Number(formData.contractAmount || 0)
+    const finalContractAmount = finalContractItems.reduce((sum, item) => sum + item.amount, 0)
 
     if (!finalContractAmount || finalContractAmount <= 0) {
-      setError('Sözleşme tutarı 0 dan büyük olmalıdır.')
+      setError('Sözleşme tutarı için en az bir geçerli iş kalemi girilmelidir.')
       return
     }
 
@@ -203,6 +195,7 @@ export default function SubcontractorModal({
         name: formData.name.trim(),
         workScope: formData.workScope.trim(),
         contractDate: formData.contractDate,
+        workStartDate: formData.workStartDate,
         workDurationDays: Math.round(formData.workDurationDays || 0),
         contractAmount: Number(finalContractAmount.toFixed(2)),
         contractItems: finalContractItems,
@@ -252,13 +245,22 @@ export default function SubcontractorModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
               <label className="block text-sm text-gray-700 mb-1">Sözleşme Tarihi</label>
               <input
                 type="date"
                 value={formData.contractDate}
                 onChange={e => setFormData(prev => ({ ...prev, contractDate: e.target.value }))}
+                className="w-full px-3 py-2 border rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">İşe Başlama Tarihi</label>
+              <input
+                type="date"
+                value={formData.workStartDate}
+                onChange={e => setFormData(prev => ({ ...prev, workStartDate: e.target.value }))}
                 className="w-full px-3 py-2 border rounded"
               />
             </div>
@@ -275,33 +277,10 @@ export default function SubcontractorModal({
             </div>
             <div>
               <label className="block text-sm text-gray-700 mb-1">Sözleşme Tutarı (TL)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={contractAmountInput}
-                onFocus={() => {
-                  if (!contractAmountInput.trim() && formData.contractAmount > 0) {
-                    setContractAmountInput(String(formData.contractAmount).replace('.', ','))
-                  }
-                }}
-                onChange={e => {
-                  const raw = sanitizeAmountTyping(e.target.value)
-                  setContractAmountInput(raw)
-                  if (!raw.trim()) {
-                    setFormData(prev => ({ ...prev, contractAmount: 0 }))
-                    return
-                  }
-                  const parsed = parseAmountInput(raw)
-                  setFormData(prev => ({ ...prev, contractAmount: parsed }))
-                }}
-                onBlur={() => {
-                  const parsed = parseAmountInput(contractAmountInput)
-                  setFormData(prev => ({ ...prev, contractAmount: parsed }))
-                  setContractAmountInput(parsed > 0 ? formatAmountTr(parsed) : '')
-                }}
-                className="w-full px-3 py-2 border rounded"
-                placeholder="0,00"
-              />
+              <div className="w-full rounded border bg-gray-100 px-3 py-2 font-semibold text-gray-900">
+                {formatAmountTr(contractItemsTotal)}
+              </div>
+              <div className="mt-1 text-xs text-gray-500">İş kalemleri toplamından otomatik hesaplanır.</div>
             </div>
           </div>
 
@@ -322,7 +301,7 @@ export default function SubcontractorModal({
 
             <div className="space-y-3">
               {contractItems.map(item => {
-                const amount = Number(item.estimatedQuantity || 0) * Number(item.unitPrice || 0)
+                const amount = parseDecimalInput(item.estimatedQuantity) * parseDecimalInput(item.unitPrice)
                 return (
                   <div key={item.id} className="grid grid-cols-1 gap-2 rounded border border-gray-200 bg-white p-3 md:grid-cols-[minmax(160px,1.4fr)_90px_120px_120px_120px_44px]">
                     <div>
@@ -346,11 +325,10 @@ export default function SubcontractorModal({
                     <div>
                       <label className="mb-1 block text-xs text-gray-600">Takribi Miktar</label>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={item.estimatedQuantity || ''}
-                        onChange={e => updateContractItem(item.id, { estimatedQuantity: Number(e.target.value || 0) })}
+                        onChange={e => updateContractItem(item.id, { estimatedQuantity: parseDecimalInput(e.target.value) })}
                         className="w-full rounded border px-3 py-2 text-sm"
                         placeholder="0"
                       />
@@ -358,11 +336,10 @@ export default function SubcontractorModal({
                     <div>
                       <label className="mb-1 block text-xs text-gray-600">Birim Fiyat</label>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={item.unitPrice || ''}
-                        onChange={e => updateContractItem(item.id, { unitPrice: Number(e.target.value || 0) })}
+                        onChange={e => updateContractItem(item.id, { unitPrice: parseDecimalInput(e.target.value) })}
                         className="w-full rounded border px-3 py-2 text-sm"
                         placeholder="0"
                       />

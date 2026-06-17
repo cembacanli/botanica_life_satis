@@ -10,6 +10,7 @@ interface Subcontractor {
   name: string
   workScope: string
   contractDate: string
+  workStartDate?: string
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
@@ -334,7 +335,7 @@ export default function ContractsPage() {
             )
           : 0
 
-      const endDate = getEndDate(subcontractor.contractDate, subcontractor.workDurationDays)
+      const endDate = getEndDate(subcontractor.workStartDate || subcontractor.contractDate, subcontractor.workDurationDays)
       const daysRemaining = getDaysRemaining(endDate)
       const status = getContractStatus(daysRemaining, completionPercent)
       const analysisText = extractAnalysisText(subcontractor.note || '')
@@ -657,6 +658,7 @@ export default function ContractsPage() {
                           </p>
                           <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
                             <span>Sözleşme: {formatDate(summary.subcontractor.contractDate)}</span>
+                            <span>Başlama: {formatDate(summary.subcontractor.workStartDate || summary.subcontractor.contractDate)}</span>
                             <span>Bitiş: {formatDate(summary.endDate)}</span>
                             <span>Süre: {summary.subcontractor.workDurationDays} gün</span>
                             <span>Telefon: {summary.subcontractor.phone || '-'}</span>
@@ -768,6 +770,10 @@ export default function ContractsPage() {
                     <DetailMetric
                       label="Sözleşme Tarihi"
                       value={formatDate(selectedContract.subcontractor.contractDate)}
+                    />
+                    <DetailMetric
+                      label="İşe Başlama"
+                      value={formatDate(selectedContract.subcontractor.workStartDate || selectedContract.subcontractor.contractDate)}
                     />
                     <DetailMetric
                       label="Planlanan Bitiş"

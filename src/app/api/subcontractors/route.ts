@@ -9,6 +9,7 @@ interface SubcontractorPayload {
   name: string
   workScope: string
   contractDate: string
+  workStartDate?: string
   workDurationDays: number
   contractAmount: number
   phone?: string
@@ -27,6 +28,7 @@ interface ContractItem {
 
 interface ContractMeta {
   contractDate: string
+  workStartDate?: string
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
@@ -54,7 +56,7 @@ function isSubcontractorsTableMissing(error: any) {
 function getSchemaErrorMessage(tableName: string) {
   const url = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '')
   const projectRef = url.replace('https://', '').split('.')[0] || 'unknown'
-  return `Supabase schema eksik: ${tableName}. Gerekli kolonlar: contract_date, work_duration_days, contract_amount. Uygulamanin bagli oldugu project ref: ${projectRef}. Lutfen ayni projede supabase/subcontractor_module.sql dosyasini tekrar calistirin.`
+  return `Supabase schema eksik: ${tableName}. Gerekli kolonlar: contract_date, work_start_date, work_duration_days, contract_amount. Uygulamanin bagli oldugu project ref: ${projectRef}. Lutfen ayni projede supabase/subcontractor_module.sql dosyasini tekrar calistirin.`
 }
 
 function isContractColumnCacheError(error: any) {
@@ -65,10 +67,12 @@ function isContractColumnCacheError(error: any) {
     (message.includes('contract_amount') ||
       message.includes('contract_items') ||
       message.includes('contract_date') ||
+      message.includes('work_start_date') ||
       message.includes('work_duration_days') ||
       message.includes('contractamount') ||
       message.includes('contractitems') ||
       message.includes('contractdate') ||
+      message.includes('workstartdate') ||
       message.includes('workdurationdays'))
   )
 }
@@ -215,16 +219,17 @@ function normalizeAndValidatePayload(body: SubcontractorPayload) {
   const name = String(body?.name || '').trim()
   const workScope = String(body?.workScope || '').trim()
   const contractDate = String(body?.contractDate || '').trim()
+  const workStartDate = String(body?.workStartDate || contractDate || '').trim()
   const workDurationDays = Math.round(Number(body?.workDurationDays || 0))
   const contractItems = normalizeContractItems(body?.contractItems)
   const contractItemsTotal = contractItems.reduce((sum, item) => sum + item.amount, 0)
-  const contractAmount = Math.round(Number(body?.contractAmount || contractItemsTotal || 0))
+  const contractAmount = Math.round(Number(contractItemsTotal || body?.contractAmount || 0))
   const phone = String(body?.phone || '').trim()
   const note = String(body?.note || '').trim()
-  if (!name || !workScope || !contractDate) return null
+  if (!name || !workScope || !contractDate || !workStartDate) return null
   if (!Number.isFinite(workDurationDays) || workDurationDays <= 0) return null
   if (!Number.isFinite(contractAmount) || contractAmount <= 0) return null
-  return { name, workScope, contractDate, workDurationDays, contractAmount, phone, note, contractItems }
+  return { name, workScope, contractDate, workStartDate, workDurationDays, contractAmount, phone, note, contractItems }
 }
 
 function normalizeContractItems(items: any): ContractItem[] {
@@ -232,9 +237,9 @@ function normalizeContractItems(items: any): ContractItem[] {
 
   return items
     .map((item, index) => {
-      const estimatedQuantity = Number(item?.estimatedQuantity || 0)
-      const unitPrice = Number(item?.unitPrice || 0)
-      const amount = Math.round(Number(item?.amount || estimatedQuantity * unitPrice || 0))
+      const estimatedQuantity = parseDecimalNumber(item?.estimatedQuantity)
+      const unitPrice = parseDecimalNumber(item?.unitPrice)
+      const amount = Number((parseDecimalNumber(item?.amount) || estimatedQuantity * unitPrice || 0).toFixed(2))
       return {
         id: String(item?.id || `item-${Date.now()}-${index}`),
         name: String(item?.name || '').trim(),
@@ -247,19 +252,38 @@ function normalizeContractItems(items: any): ContractItem[] {
     .filter(item => item.name && item.unit && item.estimatedQuantity > 0 && item.unitPrice > 0 && item.amount > 0)
 }
 
+function parseDecimalNumber(value: any): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0
+  }
+
+  const raw = String(value || '').trim()
+  if (!raw) return 0
+
+  const normalized = raw.includes(',')
+    ? raw.replace(/\s+/g, '').replace(/\./g, '').replace(',', '.')
+    : raw.replace(/\s+/g, '').replace(/,/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
 function mapRow(row: any) {
   const parsed = parsePersistedNote(row.note)
   const contractDate = row.contract_date ?? row.contractDate ?? parsed.meta.contractDate ?? ''
+  const workStartDate = row.work_start_date ?? row.workStartDate ?? parsed.meta.workStartDate ?? contractDate
   const workDurationDays = row.work_duration_days ?? row.workDurationDays ?? parsed.meta.workDurationDays ?? 0
-  const contractAmount = row.contract_amount ?? row.contractAmount ?? parsed.meta.contractAmount ?? 0
-  const contractItems = Array.isArray(row.contract_items)
-    ? normalizeContractItems(row.contract_items)
-    : normalizeContractItems(parsed.meta.contractItems)
+  const persistedContractAmount = row.contract_amount ?? row.contractAmount ?? parsed.meta.contractAmount ?? 0
+  const rowContractItems = Array.isArray(row.contract_items) ? normalizeContractItems(row.contract_items) : []
+  const metaContractItems = normalizeContractItems(parsed.meta.contractItems)
+  const contractItems = rowContractItems.length > 0 ? rowContractItems : metaContractItems
+  const contractItemsTotal = contractItems.reduce((sum, item) => sum + item.amount, 0)
+  const contractAmount = contractItemsTotal > 0 ? contractItemsTotal : persistedContractAmount
   return {
     id: row.id,
     name: row.name,
     workScope: row.work_scope ?? row.workScope ?? '',
     contractDate,
+    workStartDate,
     workDurationDays,
     contractAmount,
     contractItems,
@@ -299,6 +323,7 @@ export async function POST(request: NextRequest) {
       name: payload.name,
       work_scope: payload.workScope,
       contract_date: payload.contractDate,
+      work_start_date: payload.workStartDate,
       work_duration_days: payload.workDurationDays,
       contract_amount: payload.contractAmount,
       contract_items: payload.contractItems,
@@ -311,6 +336,7 @@ export async function POST(request: NextRequest) {
       name: payload.name,
       work_scope: payload.workScope,
       contractDate: payload.contractDate,
+      workStartDate: payload.workStartDate,
       workDurationDays: payload.workDurationDays,
       contractAmount: payload.contractAmount,
       contractItems: payload.contractItems,
@@ -325,6 +351,7 @@ export async function POST(request: NextRequest) {
       phone: payload.phone,
       note: buildPersistedNote(payload.note, {
         contractDate: payload.contractDate,
+        workStartDate: payload.workStartDate,
         workDurationDays: payload.workDurationDays,
         contractAmount: payload.contractAmount,
         contractItems: payload.contractItems,
@@ -383,6 +410,7 @@ export async function PUT(request: NextRequest) {
       name: payload.name,
       work_scope: payload.workScope,
       contract_date: payload.contractDate,
+      work_start_date: payload.workStartDate,
       work_duration_days: payload.workDurationDays,
       contract_amount: payload.contractAmount,
       contract_items: payload.contractItems,
@@ -394,6 +422,7 @@ export async function PUT(request: NextRequest) {
       name: payload.name,
       work_scope: payload.workScope,
       contractDate: payload.contractDate,
+      workStartDate: payload.workStartDate,
       workDurationDays: payload.workDurationDays,
       contractAmount: payload.contractAmount,
       contractItems: payload.contractItems,
@@ -407,6 +436,7 @@ export async function PUT(request: NextRequest) {
       phone: payload.phone,
       note: buildPersistedNote(payload.note, {
         contractDate: payload.contractDate,
+        workStartDate: payload.workStartDate,
         workDurationDays: payload.workDurationDays,
         contractAmount: payload.contractAmount,
         contractItems: payload.contractItems,

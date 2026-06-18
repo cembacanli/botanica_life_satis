@@ -154,10 +154,14 @@ export default function Dashboard() {
       })
       .map((rec: any) => rec.apartmentId)
   )
-  const potentialApartments = apartments.filter(apt => !soldApartmentIds.has(apt.id))
+  const soldWithoutLandOwnerRecords = salesRecords.filter(
+    (rec: any) => rec.saleType === 'sold' && !landOwnerApartmentIds.has(rec.apartmentId)
+  )
+  const potentialApartments = apartments.filter(
+    apt => !soldApartmentIds.has(apt.id) && !landOwnerApartmentIds.has(apt.id)
+  )
   const potentialAmount = potentialApartments.reduce((sum, apt) => sum + (apt.price || 0), 0)
-  const soldTotalAmount = salesRecords
-    .filter((rec: any) => rec.saleType === 'sold' && !landOwnerApartmentIds.has(rec.apartmentId))
+  const soldTotalAmount = soldWithoutLandOwnerRecords
     .reduce((sum: number, rec: any) => {
       const saleData = saleDetailsMap[rec.apartmentId] || {}
       return sum + (saleData.salePrice || 0)
@@ -437,14 +441,21 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             {Object.keys(blocks).map((key) => {
               const blockApts = apartments.filter(a => a.block === key)
-              const blockSales = salesRecords.filter((rec: any) => {
+              const blockLandOwnerIds = new Set(
+                blockApts
+                  .filter((apt: any) => landOwnerApartmentIds.has(apt.id))
+                  .map((apt: any) => apt.id)
+              )
+              const blockSales = soldWithoutLandOwnerRecords.filter((rec: any) => {
                 const apt = apartments.find(a => a.id === rec.apartmentId)
-                return apt && apt.block === key && rec.saleType === 'sold'
+                return apt && apt.block === key
               })
               const soldIdsInBlock = new Set(blockSales.map((rec: any) => rec.apartmentId))
-              const unsoldAptsInBlock = blockApts.filter((apt: any) => !soldIdsInBlock.has(apt.id))
+              const unsoldAptsInBlock = blockApts.filter(
+                (apt: any) => !soldIdsInBlock.has(apt.id) && !blockLandOwnerIds.has(apt.id)
+              )
               const blockPotential = blockApts.reduce((sum: number, apt: any) => {
-                if (soldIdsInBlock.has(apt.id)) return sum
+                if (soldIdsInBlock.has(apt.id) || blockLandOwnerIds.has(apt.id)) return sum
                 return sum + (apt.price || 0)
               }, 0)
               const blockAverageSalePrice = unsoldAptsInBlock.length > 0
@@ -462,7 +473,7 @@ export default function Dashboard() {
                 return sum + (saleData.depositAmount || 0) + payments
               }, 0)
 
-              const remainingApts = blocks[key].totalApartments - blockSales.length
+              const remainingApts = unsoldAptsInBlock.length
 
               return (
                 <div key={key} className="bg-white/5 backdrop-blur-lg rounded-lg p-4 border border-white/10">
@@ -514,7 +525,7 @@ export default function Dashboard() {
               <div>
                 <div className="text-sm text-gray-300">Toplam Satılan</div>
                 <div className="text-2xl font-bold text-white">
-                  {salesRecords.filter(s => s.saleType === 'sold').length}
+                  {soldWithoutLandOwnerRecords.length}
                 </div>
               </div>
               <div>

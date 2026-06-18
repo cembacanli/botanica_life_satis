@@ -14,9 +14,18 @@ interface Subcontractor {
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
+  barterItems?: BarterItem[]
   phone?: string
   note?: string
   createdAt: string
+}
+
+interface BarterItem {
+  id: string
+  block: string
+  apartmentNo: string
+  amount: number
+  note?: string
 }
 
 interface ContractItem {
@@ -283,11 +292,17 @@ export default function SubcontractorsPage() {
         .reduce((sum, claim) => sum + Number(claim.netPayableAmount || 0), 0)
       const pendingNet = Math.max(totalNet - totalPaid, 0)
       const analysisText = extractAnalysisText(item.note || '')
-      const analysisDeduction = Math.max(
+      const noteDeduction = Math.max(
         parseAnalysisDeductionFromText(analysisText),
         parseAnalysisDeductionFromText(item.note || '')
       )
-      const totalPaymentIncludingBarter = analysisDeduction + totalClaimAmount
+      const barterItemsList = item.barterItems || []
+      const barterListDeduction = Array.isArray(barterItemsList)
+        ? barterItemsList.reduce((sum, barterItem) => sum + Number(barterItem.amount || 0), 0)
+        : 0
+      const totalBarterAmount = Math.max(noteDeduction, barterListDeduction)
+
+      const totalPaymentIncludingBarter = totalBarterAmount + totalClaimAmount
       const remainingPayableAmount = Math.max(Number(item.contractAmount || 0) - totalPaymentIncludingBarter, 0)
       const completionPercent =
         item.contractAmount > 0 ? Math.min(Number(((totalClaimAmount / item.contractAmount) * 100).toFixed(1)), 100) : 0

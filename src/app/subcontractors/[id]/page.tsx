@@ -14,7 +14,16 @@ interface Subcontractor {
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
+  barterItems?: BarterItem[]
   phone?: string
+  note?: string
+}
+
+interface BarterItem {
+  id: string
+  block: string
+  apartmentNo: string
+  amount: number
   note?: string
 }
 
@@ -83,6 +92,29 @@ export default function SubcontractorDetailPage() {
   const [claims, setClaims] = useState<SubcontractorClaim[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClaim, setEditingClaim] = useState<SubcontractorClaim | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+
+  const barterItems = useMemo<BarterItem[]>(() => {
+    return subcontractor?.barterItems || []
+  }, [subcontractor])
+
+  const totalBarterAmount = useMemo(() => {
+    if (!subcontractor) return 0
+    const listTotal = Array.isArray(subcontractor.barterItems)
+      ? subcontractor.barterItems.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+      : 0
+    const noteAnalysisText = extractAnalysisText(subcontractor.note || '')
+    const noteTotal = Math.max(
+      parseAnalysisDeductionFromText(noteAnalysisText),
+      parseAnalysisDeductionFromText(subcontractor.note || '')
+    )
+    return Math.max(listTotal, noteTotal)
+  }, [subcontractor])
+
+  const noteAnalysisText = useMemo(() => {
+    if (!subcontractor) return ''
+    return extractAnalysisText(subcontractor.note || '')
+  }, [subcontractor])
 
   const loadData = () => {
     fetch('/api/subcontractors')
@@ -164,9 +196,6 @@ export default function SubcontractorDetailPage() {
   }
 
   const handleDeleteClaim = async (item: SubcontractorClaim) => {
-    const ok = window.confirm('Bu hakedis kaydini silmek istiyor musunuz?')
-    if (!ok) return
-
     const response = await fetch('/api/subcontractor-claims', {
       method: 'DELETE',
       headers: {
@@ -181,6 +210,15 @@ export default function SubcontractorDetailPage() {
       return
     }
     setClaims(prev => prev.filter(c => c.id !== item.id))
+  }
+
+  const handleDeleteClick = (item: SubcontractorClaim) => {
+    if (deleteConfirmId === item.id) {
+      handleDeleteClaim(item)
+      setDeleteConfirmId(null)
+    } else {
+      setDeleteConfirmId(item.id)
+    }
   }
 
   const totals = useMemo(() => {
@@ -245,6 +283,12 @@ export default function SubcontractorDetailPage() {
     return toNumber(found?.previousCumulativeClaimAmount)
   }, [cumulativeClaims, editingClaim, totals.totalCurrentClaim])
 
+  const remainingContractAmount = useMemo(() => {
+    if (!subcontractor) return 0
+    const contractAmount = toNumber(subcontractor.contractAmount)
+    return Math.max(contractAmount - totals.totalCurrentClaim - totalBarterAmount, 0)
+  }, [subcontractor, totals.totalCurrentClaim, totalBarterAmount])
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('tr-TR', {
       style: 'currency',
@@ -306,28 +350,88 @@ export default function SubcontractorDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2 xl:grid-cols-5">
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Kümülatif Hakediş</div>
-            <div className="text-3xl font-bold text-cyan-700 mt-1">{formatCurrency(totals.totalCurrentClaim)}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* Row 1: Contract Metrics */}
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sözleşme Bedeli</div>
+            <div className="text-xl md:text-2xl font-bold text-slate-800 mt-1 truncate" title={formatCurrency(subcontractor?.contractAmount || 0)}>
+              {formatCurrency(subcontractor?.contractAmount || 0)}
+            </div>
           </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Kümülatif İlerleme</div>
-            <div className="text-3xl font-bold text-slate-900 mt-1">%{totals.cumulativeProgressPercent.toFixed(2)}</div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Kümülatif Hakediş</div>
+            <div className="text-xl md:text-2xl font-bold text-cyan-700 mt-1 truncate" title={formatCurrency(totals.totalCurrentClaim)}>
+              {formatCurrency(totals.totalCurrentClaim)}
+            </div>
           </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Toplam Net Ödeme</div>
-            <div className="text-3xl font-bold text-teal-700 mt-1">{formatCurrency(totals.totalNetPayable)}</div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Barter Toplamı</div>
+            <div className="text-xl md:text-2xl font-bold text-indigo-700 mt-1 truncate" title={formatCurrency(totalBarterAmount)}>
+              {formatCurrency(totalBarterAmount)}
+            </div>
           </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Ödenen</div>
-            <div className="text-3xl font-bold text-green-700 mt-1">{formatCurrency(totals.totalPaid)}</div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Kalan Sözleşme Bakiyesi</div>
+            <div className="text-xl md:text-2xl font-bold text-rose-700 mt-1 truncate" title={formatCurrency(remainingContractAmount)}>
+              {formatCurrency(remainingContractAmount)}
+            </div>
           </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-            <div className="text-base text-gray-600">Bekleyen</div>
-            <div className="text-3xl font-bold text-amber-700 mt-1">{formatCurrency(totals.totalPending)}</div>
+
+          {/* Row 2: Progress & Payment Metrics */}
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Kümülatif İlerleme</div>
+            <div className="text-xl md:text-2xl font-bold text-slate-900 mt-1 truncate">
+              %{totals.cumulativeProgressPercent.toFixed(2)}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Net Ödeme</div>
+            <div className="text-xl md:text-2xl font-bold text-teal-700 mt-1 truncate" title={formatCurrency(totals.totalNetPayable)}>
+              {formatCurrency(totals.totalNetPayable)}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bekleyen</div>
+            <div className="text-xl md:text-2xl font-bold text-amber-700 mt-1 truncate" title={formatCurrency(totals.totalPending)}>
+              {formatCurrency(totals.totalPending)}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ödenen</div>
+            <div className="text-xl md:text-2xl font-bold text-green-700 mt-1 truncate" title={formatCurrency(totals.totalPaid)}>
+              {formatCurrency(totals.totalPaid)}
+            </div>
           </div>
         </div>
+
+        {totalBarterAmount > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden mb-6">
+            <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">
+              Barter Daireleri
+            </div>
+            <div className="p-5">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {barterItems.map((item, idx) => (
+                  <div key={item.id || idx} className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <div className="text-base font-semibold text-slate-900">
+                      {item.block} Blok - Daire {item.apartmentNo}
+                    </div>
+                    <div className="text-sm text-indigo-700 font-bold mt-1">
+                      {formatCurrency(item.amount)}
+                    </div>
+                    {item.note && <div className="text-xs text-slate-500 mt-2">{item.note}</div>}
+                  </div>
+                ))}
+                {barterItems.length === 0 && noteAnalysisText && (
+                  <div className="col-span-full text-sm text-slate-700 bg-slate-50 p-4 rounded-xl border">
+                    <div className="font-semibold text-xs uppercase text-slate-500 mb-1">Barter Açıklaması</div>
+                    {noteAnalysisText}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Hakediş Kayıtları</div>
@@ -387,21 +491,40 @@ export default function SubcontractorDetailPage() {
                     {item.note && <div className="text-sm text-gray-500 mt-1">{item.note}</div>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => {
-                        setEditingClaim(item)
-                        setModalOpen(true)
-                      }}
-                      className="px-4 py-2 text-sm rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
-                      >
-                        Düzenle
-                      </button>
-                    <button
-                      onClick={() => handleDeleteClaim(item)}
-                      className="px-4 py-2 text-sm rounded bg-red-100 text-red-700 hover:bg-red-200"
-                    >
-                      Sil
-                    </button>
+                    {deleteConfirmId === item.id ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDeleteClick(item)}
+                          className="px-4 py-2 text-sm rounded bg-red-600 text-white hover:bg-red-700 font-semibold"
+                        >
+                          Evet, Sil
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="px-4 py-2 text-sm rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
+                        >
+                          Vazgeç
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditingClaim(item)
+                            setModalOpen(true)
+                          }}
+                          className="px-4 py-2 text-sm rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
+                        >
+                          Düzenle
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(item)}
+                          className="px-4 py-2 text-sm rounded bg-red-100 text-red-700 hover:bg-red-200"
+                        >
+                          Sil
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -428,4 +551,48 @@ export default function SubcontractorDetailPage() {
       />
     </div>
   )
+}
+
+function extractAnalysisText(note: string) {
+  const text = String(note || '')
+  const analysisLines = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('[Analiz]'))
+    .map(line => line.replace(/^\[Analiz\]\s*/i, '').replace(/\s*Kalan plan:.*$/i, ''))
+  return analysisLines.join(' ')
+}
+
+function parseMoneyText(valueText: string) {
+  let raw = String(valueText || '').toLocaleLowerCase('tr-TR').trim()
+  let multiplier = 1
+  if (raw.includes('milyar')) {
+    multiplier = 1_000_000_000
+    raw = raw.replace('milyar', '')
+  } else if (raw.includes('milyon')) {
+    multiplier = 1_000_000
+    raw = raw.replace('milyon', '')
+  } else if (raw.includes('bin')) {
+    multiplier = 1_000
+    raw = raw.replace('bin', '')
+  }
+  raw = raw.replace(/\s+/g, '')
+  raw = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/\./g, '')
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return Math.round(parsed * multiplier)
+}
+
+function parseAnalysisDeductionFromText(textValue: string) {
+  const text = String(textValue || '')
+  const explicitMatch = text.match(
+    /Toplam\s+sat[ıi]ş?\s+bedeli:\s*([\d.,\s]+(?:\s*(?:milyon|milyar|bin))?)\s*(?:TL|₺|lira)?/i
+  )
+  if (explicitMatch?.[1]) return parseMoneyText(explicitMatch[1])
+
+  const fallbackMatch = text.match(
+    /([\d.,\s]+(?:\s*(?:milyon|milyar|bin))?)\s*(?:TL|₺|lira|bedelle)/i
+  )
+  if (fallbackMatch?.[1]) return parseMoneyText(fallbackMatch[1])
+  return 0
 }

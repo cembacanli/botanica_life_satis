@@ -14,9 +14,18 @@ interface Subcontractor {
   workDurationDays: number
   contractAmount: number
   contractItems?: ContractItem[]
+  barterItems?: BarterItem[]
   phone?: string
   note?: string
   createdAt: string
+}
+
+interface BarterItem {
+  id: string
+  block: string
+  apartmentNo: string
+  amount: number
+  note?: string
 }
 
 interface ContractItem {
@@ -143,6 +152,40 @@ function extractAnalysisText(note: string) {
     .filter(line => line.startsWith('[Analiz]'))
     .map(line => line.replace(/^\[Analiz\]\s*/i, ''))
     .join(' ')
+}
+
+function parseMoneyText(valueText: string) {
+  let raw = String(valueText || '').toLocaleLowerCase('tr-TR').trim()
+  let multiplier = 1
+  if (raw.includes('milyar')) {
+    multiplier = 1_000_000_000
+    raw = raw.replace('milyar', '')
+  } else if (raw.includes('milyon')) {
+    multiplier = 1_000_000
+    raw = raw.replace('milyon', '')
+  } else if (raw.includes('bin')) {
+    multiplier = 1_000
+    raw = raw.replace('bin', '')
+  }
+  raw = raw.replace(/\s+/g, '')
+  raw = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/\./g, '')
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return Math.round(parsed * multiplier)
+}
+
+function parseAnalysisDeductionFromText(textValue: string) {
+  const text = String(textValue || '')
+  const explicitMatch = text.match(
+    /Toplam\s+sat[ıi]ş?\s+bedeli:\s*([\d.,\s]+(?:\s*(?:milyon|milyar|bin))?)\s*(?:TL|₺|lira)?/i
+  )
+  if (explicitMatch?.[1]) return parseMoneyText(explicitMatch[1])
+
+  const fallbackMatch = text.match(
+    /([\d.,\s]+(?:\s*(?:milyon|milyar|bin))?)\s*(?:TL|₺|lira|bedelle)/i
+  )
+  if (fallbackMatch?.[1]) return parseMoneyText(fallbackMatch[1])
+  return 0
 }
 
 function stripAnalysisLines(note: string) {
@@ -321,8 +364,19 @@ export default function ContractsPage() {
         0
       )
       const pendingPayment = Math.max(totalNetAccrued - totalPaid, 0)
+      const noteAnalysisText = extractAnalysisText(subcontractor.note || '')
+      const noteDeduction = Math.max(
+        parseAnalysisDeductionFromText(noteAnalysisText),
+        parseAnalysisDeductionFromText(subcontractor.note || '')
+      )
+      const barterItemsList = subcontractor.barterItems || []
+      const barterListDeduction = Array.isArray(barterItemsList)
+        ? barterItemsList.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+        : 0
+      const totalBarterAmount = Math.max(noteDeduction, barterListDeduction)
+
       const remainingContractAmount = Math.max(
-        Number(subcontractor.contractAmount || 0) - totalClaimAmount,
+        Number(subcontractor.contractAmount || 0) - totalClaimAmount - totalBarterAmount,
         0
       )
       const completionPercent =
@@ -868,32 +922,62 @@ export default function ContractsPage() {
                           {selectedContract.subcontractor.contractItems.length} kalem
                         </div>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[640px] text-sm">
+                      <div className="space-y-3 lg:hidden">
+                        {selectedContract.subcontractor.contractItems.map(item => (
+                          <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-sm font-semibold text-slate-900">{item.name}</div>
+                            <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Birim</div>
+                                <div className="mt-1 font-medium text-slate-700">{item.unit}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Takribi Miktar</div>
+                                <div className="mt-1 font-medium text-slate-700">
+                                  {new Intl.NumberFormat('tr-TR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  }).format(item.estimatedQuantity)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Birim Fiyat</div>
+                                <div className="mt-1 font-medium text-slate-700">{formatCurrency(item.unitPrice)}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Tutar</div>
+                                <div className="mt-1 font-semibold text-slate-900">{formatCurrency(item.amount)}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="hidden overflow-x-auto lg:block">
+                        <table className="w-full min-w-[480px] table-fixed text-sm">
                           <thead>
                             <tr className="border-b bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-500">
                               <th className="px-3 py-2">İş Kalemi</th>
-                              <th className="px-3 py-2">Birim</th>
-                              <th className="px-3 py-2 text-right">Takribi Miktar</th>
-                              <th className="px-3 py-2 text-right">Birim Fiyat</th>
-                              <th className="px-3 py-2 text-right">Tutar</th>
+                              <th className="w-[8%] px-2 py-2">Birim</th>
+                              <th className="w-[18%] px-2 py-2 text-right">Takribi Miktar</th>
+                              <th className="w-[18%] px-2 py-2 text-right">Birim Fiyat</th>
+                              <th className="w-[22%] px-3 py-2 text-right">Tutar</th>
                             </tr>
                           </thead>
                           <tbody>
                             {selectedContract.subcontractor.contractItems.map(item => (
                               <tr key={item.id} className="border-b last:border-b-0">
                                 <td className="px-3 py-3 font-medium text-slate-900">{item.name}</td>
-                                <td className="px-3 py-3 text-slate-600">{item.unit}</td>
-                                <td className="px-3 py-3 text-right text-slate-700">
+                                <td className="px-2 py-3 text-slate-600 whitespace-nowrap">{item.unit}</td>
+                                <td className="px-2 py-3 text-right text-slate-700 whitespace-nowrap">
                                   {new Intl.NumberFormat('tr-TR', {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 2,
                                   }).format(item.estimatedQuantity)}
                                 </td>
-                                <td className="px-3 py-3 text-right text-slate-700">
+                                <td className="px-2 py-3 text-right text-slate-700 whitespace-nowrap">
                                   {formatCurrency(item.unitPrice)}
                                 </td>
-                                <td className="px-3 py-3 text-right font-semibold text-slate-900">
+                                <td className="px-3 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">
                                   {formatCurrency(item.amount)}
                                 </td>
                               </tr>
@@ -922,18 +1006,18 @@ export default function ContractsPage() {
                     </div>
                   ) : null}
 
-                  <div className="mt-6 flex flex-wrap gap-3">
+                  <div className="mt-6 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-2 gap-3">
                     <button
                       onClick={() =>
                         router.push(`/subcontractors/${selectedContract.subcontractor.id}`)
                       }
-                      className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                      className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 text-center"
                     >
                       Hakediş Sayfası
                     </button>
                     <button
                       onClick={() => router.push('/subcontractors')}
-                      className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                      className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200 text-center"
                     >
                       Taşeron Listesi
                     </button>
@@ -942,13 +1026,13 @@ export default function ContractsPage() {
                         setEditingSubcontractor(selectedContract.subcontractor)
                         setModalOpen(true)
                       }}
-                      className="rounded-2xl bg-cyan-100 px-4 py-3 text-sm font-medium text-cyan-800 transition hover:bg-cyan-200"
+                      className="rounded-2xl bg-cyan-100 px-4 py-3 text-sm font-medium text-cyan-800 transition hover:bg-cyan-200 text-center"
                     >
                       Sözleşmeyi Düzenle
                     </button>
                     <button
                       onClick={() => handleDeleteSubcontractor(selectedContract.subcontractor)}
-                      className="rounded-2xl bg-rose-100 px-4 py-3 text-sm font-medium text-rose-700 transition hover:bg-rose-200"
+                      className="rounded-2xl bg-rose-100 px-4 py-3 text-sm font-medium text-rose-700 transition hover:bg-rose-200 text-center"
                     >
                       Sözleşmeyi Sil
                     </button>

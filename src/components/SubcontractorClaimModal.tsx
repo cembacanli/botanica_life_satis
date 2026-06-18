@@ -121,6 +121,20 @@ export default function SubcontractorClaimModal({
     setInitializedOpen(true)
   }, [isOpen, initializedOpen, initialData, defaultPreviousPaidAmount, contractItems, subcontractorWorkScope])
 
+  useEffect(() => {
+    if (formData.workItem === 'Ek Yapılmış Ödeme / Malzeme Düşümü') {
+      setFormData(prev => {
+        if (prev.deductionAmount !== prev.currentClaimAmount) {
+          return {
+            ...prev,
+            deductionAmount: prev.currentClaimAmount,
+          }
+        }
+        return prev
+      })
+    }
+  }, [formData.currentClaimAmount, formData.workItem])
+
   const selectedContractItem = useMemo(
     () => contractItems.find(item => item.name === formData.workItem) || null,
     [contractItems, formData.workItem]
@@ -261,25 +275,36 @@ export default function SubcontractorClaimModal({
                 onChange={e => {
                   const selectedName = e.target.value
                   const selected = contractItems.find(item => item.name === selectedName)
-                  const nextQuantity = parseDecimalInput(formData.claimQuantity)
+                  const nextQuantity = selectedName === 'Ek Yapılmış Ödeme / Malzeme Düşümü' ? 0 : parseDecimalInput(formData.claimQuantity)
                   setFormData(prev => ({
                     ...prev,
                     workItem: selectedName,
+                    claimQuantity: selectedName === 'Ek Yapılmış Ödeme / Malzeme Düşümü' ? '' : prev.claimQuantity,
                     currentClaimAmount: selected && nextQuantity > 0 ? Number((nextQuantity * selected.unitPrice).toFixed(2)) : prev.currentClaimAmount,
                   }))
                 }}
                 className="w-full px-3 py-2 border rounded bg-white"
               >
                 {contractItems.length === 0 ? (
-                  <option value={subcontractorWorkScope || subcontractorName}>
-                    {subcontractorWorkScope || subcontractorName}
-                  </option>
-                ) : (
-                  contractItems.map(item => (
-                    <option key={item.id} value={item.name}>
-                      {item.name} - {item.estimatedQuantity} {item.unit} x {formatCurrency(item.unitPrice)}
+                  <>
+                    <option value={subcontractorWorkScope || subcontractorName}>
+                      {subcontractorWorkScope || subcontractorName}
                     </option>
-                  ))
+                    <option value="Ek Yapılmış Ödeme / Malzeme Düşümü">
+                      Ek Yapılmış Ödeme / Malzeme Düşümü (Kesinti)
+                    </option>
+                  </>
+                ) : (
+                  <>
+                    {contractItems.map(item => (
+                      <option key={item.id} value={item.name}>
+                        {item.name} - {item.estimatedQuantity} {item.unit} x {formatCurrency(item.unitPrice)}
+                      </option>
+                    ))}
+                    <option value="Ek Yapılmış Ödeme / Malzeme Düşümü">
+                      Ek Yapılmış Ödeme / Malzeme Düşümü (Kesinti)
+                    </option>
+                  </>
                 )}
               </select>
             </div>
@@ -289,6 +314,7 @@ export default function SubcontractorClaimModal({
                 type="text"
                 inputMode="decimal"
                 value={formData.claimQuantity ?? ''}
+                disabled={formData.workItem === 'Ek Yapılmış Ödeme / Malzeme Düşümü'}
                 onChange={e => {
                   const rawQuantity = sanitizeDecimalInput(e.target.value)
                   const quantity = parseDecimalInput(rawQuantity)
@@ -299,7 +325,9 @@ export default function SubcontractorClaimModal({
                   }))
                 }}
                 onBlur={() => setFormData(prev => ({ ...prev, claimQuantity: formatDecimalInput(prev.claimQuantity) }))}
-                className="w-full px-3 py-2 border rounded bg-white"
+                className={`w-full px-3 py-2 border rounded bg-white ${
+                  formData.workItem === 'Ek Yapılmış Ödeme / Malzeme Düşümü' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+                }`}
                 placeholder="0"
               />
             </div>
@@ -327,7 +355,11 @@ export default function SubcontractorClaimModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-700 mb-1">Bu Hakediş (TL)</label>
+              <label className="block text-sm text-gray-700 mb-1">
+                {formData.workItem === 'Ek Yapılmış Ödeme / Malzeme Düşümü'
+                  ? 'Düşülecek Tutar (TL)'
+                  : 'Bu Hakediş (TL)'}
+              </label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -346,7 +378,12 @@ export default function SubcontractorClaimModal({
                 value={formData.deductionAmount ?? ''}
                 onChange={e => setFormData(prev => ({ ...prev, deductionAmount: sanitizeDecimalInput(e.target.value) }))}
                 onBlur={() => setFormData(prev => ({ ...prev, deductionAmount: formatDecimalInput(prev.deductionAmount) }))}
-                className="w-full px-3 py-2 border rounded"
+                className={`w-full px-3 py-2 border rounded ${
+                  formData.workItem === 'Ek Yapılmış Ödeme / Malzeme Düşümü'
+                    ? 'bg-gray-100 text-gray-700 cursor-not-allowed'
+                    : ''
+                }`}
+                readOnly={formData.workItem === 'Ek Yapılmış Ödeme / Malzeme Düşümü'}
                 placeholder="0"
               />
             </div>

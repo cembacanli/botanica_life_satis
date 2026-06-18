@@ -425,6 +425,40 @@ async function syncBarterSales(payload: ReturnType<typeof normalizeAndValidatePa
   }
 }
 
+async function cancelBarterSales(barterItems: BarterItem[]) {
+  if (!barterItems || barterItems.length === 0) return
+
+  for (const item of barterItems) {
+    const apartmentNumber = Number.parseInt(item.apartmentNo, 10)
+    if (!Number.isFinite(apartmentNumber)) continue
+
+    const { data: apartment, error: apartmentError } = await supabase
+      .from('apartments')
+      .select('id')
+      .eq('block', item.block)
+      .eq('number', apartmentNumber)
+      .maybeSingle()
+
+    if (apartmentError || !apartment?.id) continue
+
+    // Delete records from sales and sale_details
+    await supabase.from('sales').delete().eq('apartment_id', apartment.id)
+    await supabase.from('sale_details').delete().eq('apartment_id', apartment.id)
+
+    // Update status to available
+    await supabase.from('apartments').update({ status: 'available' }).eq('id', apartment.id)
+  }
+}
+
+function getSubcontractorBarterItems(row: any): BarterItem[] {
+  if (!row) return []
+  const parsed = parsePersistedNote(row.note)
+  const rowBarterItems = Array.isArray(row.barter_items) ? normalizeBarterItems(row.barter_items) : []
+  const metaBarterItems = normalizeBarterItems(parsed.meta.barterItems)
+  return rowBarterItems.length > 0 ? rowBarterItems : metaBarterItems
+}
+
+
 async function validateBarterSales(payload: ReturnType<typeof normalizeAndValidatePayload>) {
   if (!payload || payload.barterItems.length === 0) return
 
@@ -626,6 +660,13 @@ export async function PUT(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     await validateBarterSales(payload)
 
+    const { data: oldSub } = await supabase
+      .from(SUBCONTRACTORS_TABLE)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+
     const updatePayload = {
       name: payload.name,
       work_scope: payload.workScope,
@@ -705,7 +746,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Kayit bulunamadi.' }, { status: 404 })
     }
 
+    if (oldSub) {
+      const oldBarterItems = getSubcontractorBarterItems(oldSub)
+      const newBarterItems = payload.barterItems
+
+      const removedBarterItems = oldBarterItems.filter(
+        oldItem => !newBarterItems.some(
+          newItem => newItem.block === oldItem.block && newItem.apartmentNo === oldItem.apartmentNo
+        )
+      )
+
+      if (removedBarterItems.length > 0) {
+        await cancelBarterSales(removedBarterItems)
+      }
+    }
+
     await syncBarterSales(payload)
+
 
     return NextResponse.json(mapRow(data[0]))
   } catch (error) {
@@ -728,7 +785,21 @@ export async function DELETE(request: NextRequest) {
     const id = String(body?.id || '').trim()
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+    const { data: subcontractor } = await supabase
+      .from(SUBCONTRACTORS_TABLE)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (subcontractor) {
+      const barterItems = getSubcontractorBarterItems(subcontractor)
+      if (barterItems.length > 0) {
+        await cancelBarterSales(barterItems)
+      }
+    }
+
     const { error } = await supabase.from(SUBCONTRACTORS_TABLE).delete().eq('id', id)
+
     if (error) {
       if (isSubcontractorsTableMissing(error)) {
         return NextResponse.json({ error: getSchemaErrorMessage(SUBCONTRACTORS_TABLE) }, { status: 500 })

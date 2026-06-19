@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -144,7 +143,7 @@ const defaultScenarioInputs: ScenarioInputs = {
 const SCENARIO_FIELDS: ScenarioFieldConfig[] = [
   { key: 'scenarioName', label: 'Senaryo adı', type: 'text', description: 'Kayıt listesinde bu isimle görünür.' },
   { key: 'landArea', label: 'Arsa alanı (m²)', type: 'number', description: 'Toplam parsel alanı.' },
-  { key: 'commonAreaRatio', label: 'Ortak alan oran hedefi (%)', type: 'percent', description: 'Yüzde olarak girin.' },
+  { key: 'commonAreaRatio', label: 'Ortak alan oran hedefi (%)', type: 'percent', description: 'Ortak alan m² hedef oranı.' },
   { key: 'indirectCostRate', label: 'Genel gider oranı (%)', type: 'percent', description: 'Şantiye genel gider payı.' },
   { key: 'contingencyRate', label: 'Beklenmeyen gider oranı (%)', type: 'percent', description: 'Risk ve sapma rezervi.' },
   { key: 'permitAndProjectCost', label: 'Ruhsat ve proje gideri', type: 'currency', description: 'Sabit resmî ve proje giderleri.' },
@@ -535,6 +534,214 @@ function getSubtotalRowClass(mainCategory: MainCategory | '') {
   return 'border-stone-300 bg-stone-50 text-stone-900'
 }
 
+// ==================== SVG Charts and Helpers ====================
+
+type DonutChartProps = {
+  data: { label: string; value: number; color: string }[]
+}
+
+function DonutChart({ data }: DonutChartProps) {
+  const total = useMemo(() => data.reduce((sum, item) => sum + item.value, 0), [data])
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+
+  const segments = useMemo(() => {
+    let accumulatedPercent = 0
+    const r = 36
+    const circumference = 2 * Math.PI * r // ~226.195
+    return data.map((item, index) => {
+      const percent = total > 0 ? item.value / total : 0
+      const segmentLength = percent * circumference
+      const strokeDashoffset = -accumulatedPercent * circumference
+      accumulatedPercent += percent
+
+      return {
+        ...item,
+        percent,
+        segmentLength,
+        strokeDashoffset,
+        r,
+        circumference,
+      }
+    })
+  }, [data, total])
+
+  if (total === 0) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-stone-400">
+        Gösterilecek veri yok
+      </div>
+    )
+  }
+
+  const activeSegment = hoveredIndex !== null ? segments[hoveredIndex] : null
+
+  return (
+    <div className="relative flex flex-col items-center justify-center sm:flex-row gap-6">
+      <div className="relative h-44 w-44 shrink-0">
+        <svg viewBox="0 0 100 100" className="h-full w-full">
+          <circle cx="50" cy="50" r="36" fill="transparent" stroke="#f5f5f4" strokeWidth="8" />
+          {segments.map((seg, idx) => (
+            <circle
+              key={idx}
+              cx="50"
+              cy="50"
+              r={seg.r}
+              fill="transparent"
+              stroke={seg.color}
+              strokeWidth={hoveredIndex === idx ? 11 : 8}
+              strokeDasharray={`${seg.segmentLength} ${seg.circumference}`}
+              strokeDashoffset={seg.strokeDashoffset}
+              transform="rotate(-90 50 50)"
+              className="transition-all duration-300 cursor-pointer origin-center"
+              onMouseEnter={() => setHoveredIndex(idx)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            />
+          ))}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-4">
+          {activeSegment ? (
+            <>
+              <span className="text-[10px] font-bold text-stone-450 uppercase tracking-wider truncate max-w-full">
+                {activeSegment.label}
+              </span>
+              <span className="text-sm font-extrabold text-stone-900 mt-0.5">
+                {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(activeSegment.value)}
+              </span>
+              <span className="text-[11px] font-bold text-orange-600 mt-0.5">
+                %{(activeSegment.percent * 100).toFixed(1)}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-bold text-stone-450 uppercase tracking-wider">
+                Toplam
+              </span>
+              <span className="text-sm font-extrabold text-stone-850 mt-0.5">
+                {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(total)}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5 flex-1 justify-center">
+        {segments.map((seg, idx) => (
+          <div
+            key={idx}
+            className={`flex items-center justify-between gap-3 p-1.5 rounded-xl transition cursor-pointer ${hoveredIndex === idx ? 'bg-stone-50 ring-1 ring-stone-200' : 'hover:bg-stone-50/50'}`}
+            onMouseEnter={() => setHoveredIndex(idx)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: seg.color }}></span>
+              <span className="text-xs font-semibold text-stone-700 truncate">{seg.label}</span>
+            </div>
+            <div className="flex items-center gap-2 text-right">
+              <span className="text-xs font-bold text-stone-900">
+                {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(seg.value)}
+              </span>
+              <span className="text-[10px] font-medium text-stone-400 w-8">
+                %{(seg.percent * 100).toFixed(0)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+type BarChartProps = {
+  data: { label: string; value: number; color: string }[]
+}
+
+function BarChart({ data }: BarChartProps) {
+  const maxValue = useMemo(() => Math.max(...data.map(item => item.value), 1), [data])
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="relative flex h-48 items-end gap-3 border-b border-stone-200 pb-2 pt-6 px-2">
+        {/* Y Axis Grid Lines */}
+        <div className="absolute inset-x-0 top-6 bottom-2 flex flex-col justify-between pointer-events-none">
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+            <div key={i} className="w-full border-t border-dashed border-stone-200 relative">
+              <span className="absolute -top-2.5 right-0 bg-white/80 px-1 text-[9px] font-medium text-stone-400">
+                {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', notation: 'compact', maximumFractionDigits: 1 }).format(maxValue * ratio)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Bars */}
+        {data.map((item, idx) => {
+          const heightPercent = (item.value / maxValue) * 100
+          return (
+            <div
+              key={idx}
+              className="group relative flex flex-1 flex-col items-center justify-end h-full cursor-pointer z-10"
+              onMouseEnter={() => setHoveredIdx(idx)}
+              onMouseLeave={() => setHoveredIdx(null)}
+            >
+              {/* Tooltip */}
+              {hoveredIdx === idx && (
+                <div className="absolute -top-12 z-20 rounded-lg bg-stone-900 px-2 py-1 text-center text-[11px] font-bold text-white shadow-lg pointer-events-none whitespace-nowrap">
+                  <div className="font-bold">{item.label}</div>
+                  <div>
+                    {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(item.value)}
+                  </div>
+                </div>
+              )}
+
+              {/* Bar Rect */}
+              <div
+                className="w-8 sm:w-12 rounded-t-lg transition-all duration-300 group-hover:brightness-110 shadow-sm"
+                style={{
+                  height: `${heightPercent}%`,
+                  backgroundColor: item.color,
+                }}
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      {/* X Axis Labels */}
+      <div className="flex justify-around gap-2 text-center">
+        {data.map((item, idx) => (
+          <div key={idx} className="flex flex-col items-center gap-1 min-w-[60px] flex-1">
+            <span className="text-xs font-semibold text-stone-700 truncate max-w-[80px]">{item.label}</span>
+            <span className="text-[10px] text-stone-400">
+              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', notation: 'compact', maximumFractionDigits: 1 }).format(item.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const CATEGORY_COLORS: Record<MainCategory, string> = {
+  Hafriyat: '#ea580c', // orange-600
+  Kaba: '#292524',     // stone-800
+  Ince: '#f59e0b',     // amber-500
+  Mekanik: '#0891b2',  // cyan-600
+  Elektrik: '#4f46e5',  // indigo-600
+  'Cevre Duzenleme': '#059669', // emerald-600
+  Diger: '#a8a29e',    // stone-400
+}
+
+const CATEGORY_ACCENT_COLORS: Record<MainCategory, { activeBg: string; text: string }> = {
+  Hafriyat: { activeBg: 'bg-orange-600', text: 'text-white' },
+  Kaba: { activeBg: 'bg-stone-850', text: 'text-white' },
+  Ince: { activeBg: 'bg-amber-500', text: 'text-white' },
+  Mekanik: { activeBg: 'bg-cyan-600', text: 'text-white' },
+  Elektrik: { activeBg: 'bg-indigo-650', text: 'text-white' },
+  'Cevre Duzenleme': { activeBg: 'bg-emerald-600', text: 'text-white' },
+  Diger: { activeBg: 'bg-stone-500', text: 'text-white' },
+}
+
+// ==================== Main Page Component ====================
+
 export default function ConstructionCostsPage() {
   const router = useRouter()
   const { user, loading, isAuthenticated } = useAuth()
@@ -550,6 +757,10 @@ export default function ConstructionCostsPage() {
   const [editingSubCategoryByBlock, setEditingSubCategoryByBlock] = useState<Record<string, string>>({})
   const [newSubCategoryByBlock, setNewSubCategoryByBlock] = useState<Record<string, string>>({})
   const [subCategoryContextMenu, setSubCategoryContextMenu] = useState<SubCategoryContextMenuState | null>(null)
+
+  // Wizard tab & selected block states
+  const [activeTab, setActiveTab] = useState<'varsayimlar' | 'bloklar' | 'analiz'>('varsayimlar')
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -663,6 +874,13 @@ export default function ConstructionCostsPage() {
     })
   }, [activeMainCategoryByBlock, activeSubCategoryByBlock, blocks])
 
+  // Keep selectedBlockId valid when blocks change
+  useEffect(() => {
+    if (blocks.length > 0 && (!selectedBlockId || !blocks.some(b => b.id === selectedBlockId))) {
+      setSelectedBlockId(blocks[0].id)
+    }
+  }, [blocks, selectedBlockId])
+
   const blockMetrics = useMemo(() => blocks.map(createMetricsForBlock), [blocks])
 
   const metrics = useMemo(() => {
@@ -766,6 +984,7 @@ export default function ConstructionCostsPage() {
       [blockId]: getSubCategoryLabel(category, mainCategory),
     }))
   }
+
   const updateBlock = (blockId: string, field: keyof Omit<BlockInput, 'id' | 'items'>, value: string | number) => {
     setBlocks(prev => prev.map(block => (block.id === blockId ? { ...block, [field]: value } : block)))
   }
@@ -805,6 +1024,7 @@ export default function ConstructionCostsPage() {
         ...current,
         [nextBlock.id]: getSubCategoryLabel(nextSub, nextMain),
       }))
+      setSelectedBlockId(nextBlock.id)
       return [...prev, nextBlock]
     })
   }
@@ -828,12 +1048,20 @@ export default function ConstructionCostsPage() {
         ...current,
         [nextBlock.id]: getSubCategoryLabel(nextSub, nextMain),
       }))
+      setSelectedBlockId(nextBlock.id)
       return [...prev, nextBlock]
     })
   }
 
   const removeBlock = (blockId: string) => {
-    setBlocks(prev => (prev.length === 1 ? prev : prev.filter(block => block.id !== blockId)))
+    setBlocks(prev => {
+      const remaining = prev.filter(block => block.id !== blockId)
+      if (remaining.length === 0) return prev
+      if (selectedBlockId === blockId) {
+        setSelectedBlockId(remaining[0].id)
+      }
+      return remaining
+    })
     setActiveMainCategoryByBlock(prev => {
       const next = { ...prev }
       delete next[blockId]
@@ -1111,6 +1339,11 @@ export default function ConstructionCostsPage() {
     setBlocks(normalizedScenario.blocks)
     setEditingSubCategoryByBlock({})
     setNewSubCategoryByBlock({})
+
+    if (normalizedScenario.blocks.length > 0) {
+      setSelectedBlockId(normalizedScenario.blocks[0].id)
+    }
+
     setActiveMainCategoryByBlock(
       normalizedScenario.blocks.reduce<Record<string, MainCategory>>((acc, block) => {
         acc[block.id] = getMainCategoriesForBlock(block)[0] || ''
@@ -1153,802 +1386,265 @@ export default function ConstructionCostsPage() {
     }
   }
 
+  // Pre-calculate visual chart data
+  const donutData = useMemo(() => {
+    const mainTotals: Record<MainCategory, number> = {
+      Hafriyat: 0,
+      Kaba: 0,
+      Ince: 0,
+      Mekanik: 0,
+      Elektrik: 0,
+      'Cevre Duzenleme': 0,
+      Diger: 0,
+    }
+
+    Object.entries(metrics.categoryTotals).forEach(([category, total]) => {
+      const main = getMainCategory(category)
+      mainTotals[main] = (mainTotals[main] || 0) + total
+    })
+
+    return Object.entries(mainTotals)
+      .map(([cat, val]) => ({
+        label: getMainCategoryLabel(cat as MainCategory),
+        value: val,
+        color: CATEGORY_COLORS[cat as MainCategory] || '#a8a29e',
+      }))
+      .filter(item => item.value > 0)
+  }, [metrics.categoryTotals])
+
+  const barData = useMemo(() => {
+    const barColors = ['#ea580c', '#292524', '#f59e0b', '#0891b2', '#4f46e5', '#059669']
+    return blockMetrics.map((block, idx) => ({
+      label: block.name,
+      value: block.directCost,
+      color: barColors[idx % barColors.length],
+    }))
+  }, [blockMetrics])
+
   if (!mounted || loading) {
-    return <div className="min-h-screen p-8">Yükleniyor...</div>
+    return <div className="min-h-screen p-8 flex items-center justify-center font-medium text-stone-500 bg-stone-100">Yükleniyor...</div>
   }
 
   if (!isAuthenticated || user?.role !== 'admin') {
-    return <div className="min-h-screen p-8">Yetkiniz yok.</div>
+    return <div className="min-h-screen p-8 flex items-center justify-center font-medium text-red-500 bg-stone-100">Yetkiniz yok.</div>
   }
 
+  // Extract selected block items
+  const selectedBlock = blocks.find(b => b.id === selectedBlockId) || blocks[0]
+  const currentMetrics = blockMetrics.find(m => m.id === selectedBlock.id)
+
+  const mainCategories = getMainCategoriesForBlock(selectedBlock)
+  const activeMainCategory = getActiveMainCategory(selectedBlock)
+  const subCategories = getSubCategoriesForBlock(selectedBlock, activeMainCategory)
+  const activeSubCategory = getActiveSubCategory(selectedBlock, activeMainCategory)
+  const visibleItems = activeSubCategory
+    ? selectedBlock.items.filter(item => item.category === activeSubCategory)
+    : selectedBlock.items.filter(item => getMainCategory(item.category) === activeMainCategory)
+  const visibleSubtotal = visibleItems.reduce(
+    (sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0),
+    0
+  )
+
   return (
-    <div className="min-h-screen bg-stone-100 p-4 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 rounded-3xl bg-gradient-to-r from-stone-900 via-stone-800 to-orange-900 p-6 text-white shadow-xl md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="text-sm uppercase tracking-[0.25em] text-orange-200">Maliyet Modülü</div>
-            <h1 className="mt-2 text-3xl font-semibold">İnşaat Maliyet Hesaplama</h1>
-            <p className="mt-2 max-w-3xl text-sm text-stone-200">
-              Her blok için farklı m², kat, daire ve maliyet kalemi tanımlayın. Sistem blokları ayrı hesaplar,
-              sonra proje genelini toplar.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {activeScenarioId && (
+    <div className="min-h-screen bg-stone-100/70 antialiased text-stone-900 font-sans">
+      
+      {/* ==================== SCREEN INTERFACE ==================== */}
+      <div className="screen-only p-4 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-8">
+          
+          {/* Main Top Banner */}
+          <div className="flex flex-col gap-6 rounded-[2.5rem] bg-gradient-to-r from-stone-955 via-stone-800 to-orange-950 p-8 text-white shadow-2xl relative overflow-hidden md:flex-row md:items-center md:justify-between border border-stone-800">
+            {/* Background absolute flare */}
+            <div className="absolute right-0 top-0 w-80 h-80 bg-orange-600/10 rounded-full blur-[80px] pointer-events-none" />
+            
+            <div className="relative z-10 space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full bg-orange-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-orange-400 border border-orange-500/20">
+                PROJE YÖNETİMİ
+              </div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">İnşaat Maliyet Hesaplama</h1>
+              <p className="max-w-2xl text-stone-300 text-sm md:text-base leading-relaxed font-medium">
+                Her blok için farklı m², kat, daire ve detaylı metraj kalemleri tanımlayın. Akıllı formüller 
+                ve dinamik özetlerle maliyetinizi canlı izleyin.
+              </p>
+            </div>
+            
+            <div className="relative z-10 flex flex-wrap gap-3 shrink-0">
+              {activeScenarioId && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateScenario()
+                      alert('Mevcut senaryo başarıyla güncellendi.')
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : 'Senaryo güncellenemedi.'
+                      alert(message)
+                    }
+                  }}
+                  className="rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-950/20"
+                >
+                  Senaryoyu Güncelle
+                </button>
+              )}
               <button
                 onClick={async () => {
                   try {
-                    await updateScenario()
-                    alert('Mevcut senaryo güncellendi.')
+                    await saveScenario()
+                    alert('Yeni senaryo başarıyla kaydedildi.')
                   } catch (error) {
-                    const message = error instanceof Error ? error.message : 'Senaryo güncellenemedi.'
+                    const message = error instanceof Error ? error.message : 'Senaryo kaydedilemedi.'
                     alert(message)
                   }
                 }}
-                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                className="rounded-2xl bg-orange-600 hover:bg-orange-500 active:scale-95 transition-all px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-950/20"
               >
-                Mevcut Senaryoyu Güncelle
+                Yeni Senaryo Kaydet
               </button>
-            )}
-            <button
-              onClick={() => router.push('/')}
-              className="rounded-xl bg-white/10 px-4 py-2 text-sm hover:bg-white/20"
-            >
-              Ana Sayfa
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await saveScenario()
-                } catch (error) {
-                  const message = error instanceof Error ? error.message : 'Senaryo kaydedilemedi.'
-                  alert(message)
-                }
-              }}
-              className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
-            >
-              Senaryoyu Kaydet
-            </button>
+              <button
+                onClick={() => router.push('/')}
+                className="rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all px-5 py-3 text-sm font-semibold text-white backdrop-blur border border-white/10"
+              >
+                Geri Dön
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-          <div className="space-y-6">
-            <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-              <h2 className="text-xl font-semibold text-stone-900">Proje Varsayımları</h2>
-              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {SCENARIO_FIELDS.map(field => {
-                  const value = inputs[field.key]
-                  return (
-                    <label key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50/80 p-4">
-                      <div className="space-y-1">
-                        <span className="text-sm font-medium text-stone-800">{field.label}</span>
-                        <div className="text-xs text-stone-500">{field.description}</div>
-                      </div>
-                      <input
-                        type={field.type === 'text' ? 'text' : 'number'}
-                        step={getInputStep(field.type)}
-                        inputMode={getInputMode(field.type)}
-                        value={
-                          field.type === 'text'
-                            ? String(value)
-                            : getNumericInputValue(Number(value || 0), field.type)
-                        }
-                        onChange={e =>
-                          updateInput(
-                            field.key,
-                            parseInputValue(e.target.value, field.type)
-                          )
-                        }
-                        className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                      />
-                      <div className="flex items-center justify-between gap-3 text-xs">
-                        <span className="text-stone-400">Canlı görünüm</span>
-                        <span className="font-medium text-stone-700">{getFieldHelper(value, field.type)}</span>
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-stone-900">Bloklar</h2>
-                  <p className="text-sm text-stone-500">Her blok için ayrı veri girilir ve ayrı hesaplanır.</p>
-                </div>
+          {/* Stepper Wizard Indicator */}
+          <div className="rounded-3xl bg-white p-5 shadow-sm border border-stone-200/60">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex flex-wrap md:flex-nowrap items-center w-full gap-2 md:gap-4">
+                
+                {/* Step 1 */}
                 <button
-                  onClick={addBlock}
-                  className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+                  onClick={() => setActiveTab('varsayimlar')}
+                  className={`flex items-center gap-3 text-left p-2 rounded-2xl transition w-full md:w-auto ${
+                    activeTab === 'varsayimlar' ? 'bg-stone-50' : 'hover:bg-stone-50/50'
+                  }`}
                 >
-                  Blok Ekle
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold transition-all duration-300 ${
+                    activeTab === 'varsayimlar'
+                      ? 'bg-stone-900 text-white shadow-md'
+                      : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    01
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-stone-400 uppercase tracking-wider">Aşama 1</div>
+                    <div className="text-sm font-bold text-stone-850">Genel Parametreler</div>
+                  </div>
                 </button>
+
+                {/* Arrow / Line separator */}
+                <div className="hidden md:block h-0.5 flex-1 bg-stone-250 border-t border-dashed border-stone-200 mx-2" />
+
+                {/* Step 2 */}
+                <button
+                  onClick={() => setActiveTab('bloklar')}
+                  className={`flex items-center gap-3 text-left p-2 rounded-2xl transition w-full md:w-auto ${
+                    activeTab === 'bloklar' ? 'bg-stone-50' : 'hover:bg-stone-50/50'
+                  }`}
+                >
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold transition-all duration-300 ${
+                    activeTab === 'bloklar'
+                      ? 'bg-stone-900 text-white shadow-md'
+                      : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    02
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-stone-400 uppercase tracking-wider">Aşama 2</div>
+                    <div className="text-sm font-bold text-stone-850">Blok Yapıları & Metrajlar</div>
+                  </div>
+                </button>
+
+                {/* Arrow / Line separator */}
+                <div className="hidden md:block h-0.5 flex-1 bg-stone-250 border-t border-dashed border-stone-200 mx-2" />
+
+                {/* Step 3 */}
+                <button
+                  onClick={() => setActiveTab('analiz')}
+                  className={`flex items-center gap-3 text-left p-2 rounded-2xl transition w-full md:w-auto ${
+                    activeTab === 'analiz' ? 'bg-stone-50' : 'hover:bg-stone-50/50'
+                  }`}
+                >
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold transition-all duration-300 ${
+                    activeTab === 'analiz'
+                      ? 'bg-stone-900 text-white shadow-md'
+                      : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    03
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-stone-400 uppercase tracking-wider">Aşama 3</div>
+                    <div className="text-sm font-bold text-stone-850">Finansal Özet & Grafik</div>
+                  </div>
+                </button>
+
               </div>
-
-              <div className="mt-5 space-y-6">
-                {blocks.map((block, index) => {
-                  const currentMetrics = blockMetrics.find(item => item.id === block.id)
-                  const mainCategories = getMainCategoriesForBlock(block)
-                  const activeMainCategory = getActiveMainCategory(block)
-                  const subCategories = getSubCategoriesForBlock(block, activeMainCategory)
-                  const activeSubCategory = getActiveSubCategory(block, activeMainCategory)
-                  const visibleItems = activeSubCategory
-                    ? block.items.filter(item => item.category === activeSubCategory)
-                    : block.items.filter(item => getMainCategory(item.category) === activeMainCategory)
-                  const visibleSubtotal = visibleItems.reduce(
-                    (sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0),
-                    0
-                  )
-                  return (
-                    <div key={block.id} className="rounded-2xl border border-stone-200 p-4">
-                      <div className="mb-4 flex items-center justify-between gap-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-stone-900">{block.name}</h3>
-                          <div className="text-sm text-stone-500">Blok {index + 1} ayarları ve maliyet kalemleri</div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => duplicateBlock(block.id)}
-                            className="rounded-lg px-3 py-2 text-xs text-sky-700 hover:bg-sky-50"
-                          >
-                            Aynı Maliyetle Ekle
-                          </button>
-                          <button
-                            onClick={() => removeBlock(block.id)}
-                            disabled={blocks.length === 1}
-                            className="rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-stone-300"
-                          >
-                            Bloğu Sil
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {BLOCK_FIELDS.map(field => {
-                          const value = block[field.key]
-                          return (
-                            <label key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50/80 p-4">
-                              <div className="space-y-1">
-                                <span className="text-sm font-medium text-stone-800">{field.label}</span>
-                                <div className="text-xs text-stone-500">{field.description}</div>
-                              </div>
-                              <input
-                                type={field.type === 'text' ? 'text' : 'number'}
-                                step={getInputStep(field.type)}
-                                inputMode={getInputMode(field.type)}
-                                value={
-                                  field.type === 'text'
-                                    ? String(value)
-                                    : getNumericInputValue(Number(value || 0), field.type)
-                                }
-                                onChange={e =>
-                                  updateBlock(
-                                    block.id,
-                                    field.key,
-                                    parseInputValue(e.target.value, field.type)
-                                  )
-                                }
-                                className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                              />
-                              <div className="flex items-center justify-between gap-3 text-xs">
-                                <span className="text-stone-400">Canlı görünüm</span>
-                                <span className="font-medium text-stone-700">{getFieldHelper(value, field.type)}</span>
-                              </div>
-                            </label>
-                          )
-                        })}
-                      </div>
-
-                      <div className="mt-5 grid gap-4 md:grid-cols-4">
-                        <div className="rounded-2xl bg-stone-100 p-4">
-                          <div className="text-xs text-stone-500">Brüt alan</div>
-                          <div className="mt-1 text-lg font-semibold text-stone-900">{formatNumber(currentMetrics?.grossArea || 0, 2)} m²</div>
-                        </div>
-                        <div className="rounded-2xl bg-stone-100 p-4">
-                          <div className="text-xs text-stone-500">Net alan</div>
-                          <div className="mt-1 text-lg font-semibold text-stone-900">{formatNumber(currentMetrics?.netSellableArea || 0, 2)} m²</div>
-                        </div>
-                        <div className="rounded-2xl bg-stone-100 p-4">
-                          <div className="text-xs text-stone-500">Doğrudan maliyet</div>
-                          <div className="mt-1 text-lg font-semibold text-stone-900">{formatCurrency(currentMetrics?.directCost || 0)}</div>
-                        </div>
-                        <div className="rounded-2xl bg-stone-100 p-4">
-                          <div className="text-xs text-stone-500">Brüt m² maliyeti</div>
-                          <div className="mt-1 text-lg font-semibold text-stone-900">{formatCurrency(currentMetrics?.costPerGrossM2 || 0)}</div>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 space-y-4">
-                      <div className="space-y-4 rounded-2xl border border-stone-200 bg-white/95 p-4 shadow-sm backdrop-blur">
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="max-w-2xl">
-                          <h4 className="text-base font-semibold text-stone-900">{block.name} maliyet kalemleri</h4>
-                          <p className="text-sm text-stone-500">
-                            Bu tablo sadece seçili blok içindir. Metraj ve birim fiyatı girdiğinizde tutar otomatik
-                            hesaplanır; blok ve proje özetleri anında güncellenir.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2 xl:max-w-[34rem] xl:justify-end">
-                          <button
-                            onClick={() => addTemplateToBlock(block.id, 'hafriyat')}
-                            className="rounded-xl bg-orange-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-600"
-                          >
-                            Hafriyat Şablonu
-                          </button>
-                          <button
-                            onClick={() => addTemplateToBlock(block.id, 'kaba')}
-                            className="rounded-xl bg-stone-800 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-stone-700"
-                          >
-                            Kaba Şablonu
-                          </button>
-                          <button
-                            onClick={() => addTemplateToBlock(block.id, 'ince')}
-                            className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-500"
-                          >
-                            İnce İşler Şablonu
-                          </button>
-                          <button
-                            onClick={() => addTemplateToBlock(block.id, 'mekanik')}
-                            className="rounded-xl bg-cyan-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-cyan-600"
-                          >
-                            Mekanik + Elektrik
-                          </button>
-                          <button
-                            onClick={() => addTemplateToBlock(block.id, 'cevre')}
-                            className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600"
-                          >
-                            Çevre Düzenleme
-                          </button>
-                          <button
-                            onClick={() => addItemToBlock(block.id, activeSubCategory || activeMainCategory || 'Diger')}
-                            className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
-                          >
-                            Kalem Ekle
-                          </button>
-                        </div>
-                        </div>
-
-                      <div className="rounded-2xl border border-stone-200 bg-gradient-to-r from-stone-50 to-white p-3">
-                        <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
-                          Ana Kategori
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                        {mainCategories.map(category => (
-                          <button
-                            key={category}
-                            onClick={() =>
-                              {
-                                const nextSub = getSubCategoriesForBlock(block, category)[0] || ''
-                                setActiveMainCategoryByBlock(prev => ({
-                                  ...prev,
-                                  [block.id]: category,
-                                }))
-                                setActiveSubCategoryByBlock(prev => ({
-                                  ...prev,
-                                  [block.id]: nextSub,
-                                }))
-                                syncSubCategoryDraft(block.id, category, nextSub)
-                              }
-                            }
-                            className={`rounded-xl px-4 py-2 text-xs font-semibold tracking-[0.08em] transition ${
-                              activeMainCategory === category
-                                ? category === 'Hafriyat'
-                                  ? 'bg-orange-700 text-white shadow-sm'
-                                  : category === 'Kaba'
-                                  ? 'bg-stone-900 text-white shadow-sm'
-                                  : category === 'Ince'
-                                    ? 'bg-amber-500 text-white shadow-sm'
-                                    : category === 'Mekanik'
-                                      ? 'bg-cyan-700 text-white shadow-sm'
-                                      : category === 'Elektrik'
-                                        ? 'bg-indigo-700 text-white shadow-sm'
-                                        : category === 'Cevre Duzenleme'
-                                          ? 'bg-emerald-700 text-white shadow-sm'
-                                          : 'bg-stone-900 text-white shadow-sm'
-                                : 'bg-white text-stone-700 ring-1 ring-stone-200 hover:bg-stone-100'
-                            }`}
-                          >
-                            {getMainCategoryLabel(category)}
-                          </button>
-                        ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                        <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
-                          Alt Kategori
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                        {subCategories.map(category => (
-                          editingSubCategoryByBlock[block.id] === category ? (
-                            <input
-                              key={category}
-                              autoFocus
-                              value={subCategoryDraftByBlock[block.id] ?? getSubCategoryLabel(category, activeMainCategory)}
-                              onChange={e =>
-                                setSubCategoryDraftByBlock(prev => ({
-                                  ...prev,
-                                  [block.id]: e.target.value,
-                                }))
-                              }
-                              onBlur={() => commitInlineSubCategoryEdit(block.id, activeMainCategory, category)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  commitInlineSubCategoryEdit(block.id, activeMainCategory, category)
-                                }
-                                if (e.key === 'Escape') {
-                                  syncSubCategoryDraft(block.id, activeMainCategory, category)
-                                  stopInlineSubCategoryEdit(block.id)
-                                }
-                              }}
-                              className="min-w-[180px] rounded-xl border border-orange-300 bg-white px-3 py-2 text-xs font-medium text-stone-700 outline-none ring-2 ring-orange-100"
-                            />
-                          ) : (
-                            <button
-                              key={category}
-                              onClick={() => {
-                                setActiveSubCategoryByBlock(prev => ({
-                                  ...prev,
-                                  [block.id]: category,
-                                }))
-                                syncSubCategoryDraft(block.id, activeMainCategory, category)
-                              }}
-                              onDoubleClick={() => startInlineSubCategoryEdit(block.id, activeMainCategory, category)}
-                              onContextMenu={event => {
-                                event.preventDefault()
-                                setActiveSubCategoryByBlock(prev => ({
-                                  ...prev,
-                                  [block.id]: category,
-                                }))
-                                syncSubCategoryDraft(block.id, activeMainCategory, category)
-                                setSubCategoryContextMenu({
-                                  blockId: block.id,
-                                  mainCategory: activeMainCategory,
-                                  category,
-                                  x: event.clientX,
-                                  y: event.clientY,
-                                })
-                              }}
-                              title="Çift tıklayıp düzenleyin, sağ tık ile menü açın"
-                              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                                activeSubCategory === category
-                                  ? getSubCategoryAccent(category).active
-                                  : getSubCategoryAccent(category).idle
-                              }`}
-                            >
-                              <span className={`h-2.5 w-2.5 rounded-full ${getSubCategoryAccent(category).dot}`}></span>
-                              <span>{category}</span>
-                            </button>
-                          )
-                        ))}
-                        {subCategories.length === 0 && (
-                          <div className="rounded-xl border border-dashed border-stone-300 bg-white px-3 py-2 text-xs text-stone-500">
-                            Bu ana kategori için alt kategori yok.
-                          </div>
-                        )}
-                        </div>
-                        {subCategoryContextMenu?.blockId === block.id && (
-                          <div
-                            className="fixed z-50 min-w-[190px] rounded-2xl border border-stone-200 bg-white p-2 shadow-2xl"
-                            style={{ left: subCategoryContextMenu.x, top: subCategoryContextMenu.y }}
-                            onClick={event => event.stopPropagation()}
-                          >
-                            <button
-                              onClick={() => {
-                                startInlineSubCategoryEdit(
-                                  subCategoryContextMenu.blockId,
-                                  subCategoryContextMenu.mainCategory,
-                                  subCategoryContextMenu.category
-                                )
-                                setSubCategoryContextMenu(null)
-                              }}
-                              className="flex w-full rounded-xl px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100"
-                            >
-                              Yeniden Adlandır
-                            </button>
-                            <button
-                              onClick={() => {
-                                duplicateSubCategory(
-                                  subCategoryContextMenu.blockId,
-                                  subCategoryContextMenu.mainCategory,
-                                  subCategoryContextMenu.category
-                                )
-                                setSubCategoryContextMenu(null)
-                              }}
-                              className="flex w-full rounded-xl px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-100"
-                            >
-                              Çoğalt
-                            </button>
-                            <button
-                              onClick={() => {
-                                deleteSubCategory(subCategoryContextMenu.blockId, subCategoryContextMenu.category)
-                                setSubCategoryContextMenu(null)
-                              }}
-                              className="flex w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                            >
-                              Sil
-                            </button>
-                          </div>
-                        )}
-                        {activeSubCategory && (
-                          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-3">
-                            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
-                              Alt Kategori Adı
-                            </div>
-                            <div className="flex flex-col gap-2 md:flex-row">
-                              <input
-                                value={subCategoryDraftByBlock[block.id] ?? getSubCategoryLabel(activeSubCategory, activeMainCategory)}
-                                onChange={e =>
-                                  setSubCategoryDraftByBlock(prev => ({
-                                    ...prev,
-                                    [block.id]: e.target.value,
-                                  }))
-                                }
-                              placeholder="Alt kategori adını girin"
-                                className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm"
-                              />
-                              <button
-                                onClick={() =>
-                                  renameSubCategory(
-                                    block.id,
-                                    activeMainCategory,
-                                    activeSubCategory,
-                                    subCategoryDraftByBlock[block.id] ?? ''
-                                  )
-                                }
-                                className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
-                              >
-                                Alt Sekme Adını Güncelle
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <div className="mt-4 rounded-2xl border border-dashed border-stone-300 bg-white p-3">
-                          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
-                            Yeni Alt Sekme
-                          </div>
-                          <div className="flex flex-col gap-2 md:flex-row">
-                            <input
-                              value={newSubCategoryByBlock[block.id] || ''}
-                              onChange={e =>
-                                setNewSubCategoryByBlock(prev => ({
-                                  ...prev,
-                                  [block.id]: e.target.value,
-                                }))
-                              }
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  createSubCategory(block.id, activeMainCategory, newSubCategoryByBlock[block.id] || '')
-                                }
-                              }}
-                              placeholder="Örnek: Kaba Kalıp, İç Kapı, Aydınlatma"
-                              className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm"
-                            />
-                            <button
-                              onClick={() => createSubCategory(block.id, activeMainCategory, newSubCategoryByBlock[block.id] || '')}
-                              className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
-                            >
-                              Yeni Alt Sekme Aç
-                            </button>
-                          </div>
-                          <div className="mt-2 text-xs text-stone-500">
-                            Son kalem silinirse o alt sekme otomatik kaybolur.
-                          </div>
-                        </div>
-                      </div>
-                      </div>
-
-                      <div className="min-w-0 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-4 py-3">
-                          <div>
-                            <div className="text-sm font-semibold text-stone-900">Seçili kalem listesi</div>
-                            <div className="text-xs text-stone-500">
-                              {visibleItems.length} kalem görüntüleniyor. Önce iş kalemini, sonra kategori ve birim bilgisini,
-                              en son metraj ile birim fiyatı girin.
-                            </div>
-                          </div>
-                          <div className="rounded-full bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white">
-                            Ara toplam: {formatCurrency(visibleSubtotal)}
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 p-4">
-                          {visibleItems.map(item => {
-                            const total = (item.quantity || 0) * (item.unitPrice || 0)
-                            return (
-                              <div key={item.id} className="rounded-2xl border border-stone-200 bg-stone-50/60 p-4 shadow-sm">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500">
-                                      İş Kalemi
-                                    </div>
-                                    <input
-                                      value={item.name}
-                                      onChange={e => updateBlockItem(block.id, item.id, 'name', e.target.value)}
-                                      className="mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                                    />
-                                  </div>
-                                  <button
-                                    onClick={() => removeItemFromBlock(block.id, item.id)}
-                                    className="shrink-0 rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-50"
-                                  >
-                                    Sil
-                                  </button>
-                                </div>
-
-                                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                                  <label className="space-y-1 md:col-span-3">
-                                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Kategori</span>
-                                    <input
-                                      value={item.category}
-                                      onChange={e => updateBlockItem(block.id, item.id, 'category', e.target.value)}
-                                      className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                                    />
-                                  </label>
-
-                                  <label className="space-y-1">
-                                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Birim</span>
-                                    <input
-                                      value={item.unit}
-                                      onChange={e => updateBlockItem(block.id, item.id, 'unit', e.target.value)}
-                                      className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                                    />
-                                  </label>
-
-                                  <label className="space-y-1">
-                                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Metraj</span>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      inputMode="decimal"
-                                      value={item.quantity}
-                                      onChange={e => updateBlockItem(block.id, item.id, 'quantity', parseLocalizedNumber(e.target.value))}
-                                      className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-right text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                                    />
-                                    <div className="text-xs text-stone-500">{getFieldHelper(item.quantity, 'number')}</div>
-                                  </label>
-
-                                  <label className="space-y-1">
-                                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Birim Fiyat</span>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      inputMode="decimal"
-                                      value={item.unitPrice}
-                                      onChange={e => updateBlockItem(block.id, item.id, 'unitPrice', parseLocalizedNumber(e.target.value))}
-                                      className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-right text-sm text-stone-900 shadow-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
-                                      />
-                                      <div className="text-xs text-stone-500">{formatCurrency(item.unitPrice || 0)} / {item.unit}</div>
-                                    </label>
-                                </div>
-
-                                <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-                                  <div className="rounded-2xl bg-white px-4 py-3 ring-1 ring-stone-200">
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Canlı Hesap</div>
-                                    <div className="mt-1 text-sm font-medium text-stone-700">
-                                      {formatNumber(item.quantity || 0, 2)} {item.unit || 'birim'} x {formatCurrency(item.unitPrice || 0)}
-                                    </div>
-                                  </div>
-                                  <div className="rounded-2xl bg-white px-4 py-3 ring-1 ring-stone-200">
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Toplam Tutar</div>
-                                    <div className="mt-1 text-lg font-semibold text-stone-900">{formatCurrency(total)}</div>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          })}
-
-                          {visibleItems.length > 0 && (
-                            <div className={`rounded-2xl border px-4 py-3 ${getSubtotalRowClass(activeMainCategory)}`}>
-                              <div className="text-sm font-semibold">{activeSubCategory || 'Ara Toplam'}</div>
-                              <div className="mt-1 text-lg font-bold">{formatCurrency(visibleSubtotal)}</div>
-                            </div>
-                          )}
-
-                          {visibleItems.length === 0 && (
-                            <div className="rounded-2xl border border-dashed border-stone-300 bg-white px-4 py-8 text-center text-sm text-stone-500">
-                              Seçili kategori için kalem bulunmuyor.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
+            </div>
           </div>
 
-          <div className="space-y-6">
-            <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-              <h2 className="text-xl font-semibold text-stone-900">Özet Sonuçlar</h2>
-              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="min-w-0 rounded-3xl bg-gradient-to-br from-stone-900 to-stone-800 p-4 text-white shadow-sm">
-                  <div className="text-[11px] font-medium tracking-[0.16em] text-stone-300">Toplam Maliyet</div>
-                  <div title={formatCurrency(metrics.subtotalCost)} className="mt-3 text-2xl font-semibold leading-tight sm:text-3xl">
-                    {formatCompactCurrency(metrics.subtotalCost)}
-                  </div>
-                  <div className="mt-2 text-xs text-stone-300">{formatCurrency(metrics.subtotalCost)}</div>
-                </div>
-                <div className="min-w-0 rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50 p-4 text-orange-950 ring-1 ring-orange-200 shadow-sm">
-                  <div className="text-[11px] font-medium tracking-[0.16em] text-orange-700">Hedef Satış Cirosu</div>
-                  <div title={formatCurrency(metrics.targetSaleWithVat)} className="mt-3 text-2xl font-semibold leading-tight sm:text-3xl">
-                    {formatCompactCurrency(metrics.targetSaleWithVat)}
-                  </div>
-                  <div className="mt-2 text-xs text-orange-700">{formatCurrency(metrics.targetSaleWithVat)}</div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:col-span-2 lg:grid-cols-3">
-                  <div className="min-w-0 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <div className="text-[11px] font-medium tracking-[0.14em] text-stone-500">Brüt m² maliyeti</div>
-                    <div title={formatCurrency(metrics.costPerGrossM2)} className="mt-2 text-xl font-semibold leading-tight text-stone-900">
-                      {formatCompactCurrency(metrics.costPerGrossM2)}
-                    </div>
-                    <div className="mt-1 text-xs text-stone-500">{formatCurrency(metrics.costPerGrossM2)}</div>
-                  </div>
-                  <div className="min-w-0 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <div className="text-[11px] font-medium tracking-[0.14em] text-stone-500">Net m² maliyeti</div>
-                    <div title={formatCurrency(metrics.costPerNetM2)} className="mt-2 text-xl font-semibold leading-tight text-stone-900">
-                      {formatCompactCurrency(metrics.costPerNetM2)}
-                    </div>
-                    <div className="mt-1 text-xs text-stone-500">{formatCurrency(metrics.costPerNetM2)}</div>
-                  </div>
-                  <div className="min-w-0 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <div className="text-[11px] font-medium tracking-[0.14em] text-stone-500">Daire başı ciro</div>
-                    <div title={formatCurrency(metrics.salePerUnit)} className="mt-2 text-xl font-semibold leading-tight text-stone-900">
-                      {formatCompactCurrency(metrics.salePerUnit)}
-                    </div>
-                    <div className="mt-1 text-xs text-stone-500">{formatCurrency(metrics.salePerUnit)}</div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:col-span-2 lg:grid-cols-[0.9fr_1.1fr]">
-                  <div className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4">
-                    <div className="text-[11px] font-medium tracking-[0.14em] text-stone-500">Arsa oturum oranı</div>
-                    <div title={`%${formatNumber(metrics.lotCoverage * 100, 2)}`} className="mt-2 text-xl font-semibold text-stone-900">
-                      {formatCompactPercent(metrics.lotCoverage * 100)}
-                    </div>
-                    <div className="mt-1 text-xs text-stone-500">Arsa verimliliği</div>
-                  </div>
-                  <div className="min-w-0 rounded-2xl border border-stone-200 bg-white p-4">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-[11px] font-medium tracking-[0.14em] text-stone-500">Ortak alan oranı</div>
-                          <div title={`%${formatNumber(metrics.actualCommonAreaRatio * 100, 2)}`} className="mt-2 text-xl font-semibold text-stone-900">
-                            {formatCompactPercent(metrics.actualCommonAreaRatio * 100)}
-                          </div>
-                        </div>
-                      <div className="rounded-xl bg-stone-100 px-3 py-2 text-right">
-                        <div className="text-[10px] font-medium tracking-[0.14em] text-stone-500">Hedef</div>
-                        <div className="text-sm font-semibold text-stone-700">
-                          %{formatNumber(inputs.commonAreaRatio * 100, 2)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-3 h-2 rounded-full bg-stone-100">
-                      <div
-                        className={`h-2 rounded-full ${metrics.actualCommonAreaRatio <= inputs.commonAreaRatio ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                        style={{ width: `${Math.min((metrics.actualCommonAreaRatio / Math.max(inputs.commonAreaRatio, 0.01)) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
+          {/* Core App Grid: Sidebar (Left) + Wizard Sheet (Right) */}
+          <div className="flex flex-col lg:flex-row gap-8 items-start">
+            
+            {/* LEFT SIDEBAR: Saved Scenarios (Glassmorphism design) */}
+            <div className="w-full lg:w-80 shrink-0 space-y-6 lg:sticky lg:top-8 bg-white/80 backdrop-blur-md rounded-3xl p-6 ring-1 ring-stone-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-white">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-stone-900 tracking-tight">Kayıtlı Senaryolar</h3>
+                  <p className="text-xs font-medium text-stone-400">Bulut üzerinde kayıtlı 10 senaryo</p>
                 </div>
               </div>
-            </section>
 
-            <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-stone-200">
-              <h2 className="text-xl font-semibold text-stone-900">Alan ve Maliyet Dağılımı</h2>
-              <div className="mt-3 grid grid-cols-1 gap-2 text-[13px] min-[560px]:grid-cols-2 min-[560px]:gap-3">
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Toplam blok adedi</span><span className="font-medium text-stone-900">{formatNumber(blocks.length, 0)}</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Toplam taban oturumu</span><span className="font-medium text-stone-900">{formatNumber(metrics.totalBaseFootprint, 2)} m²</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Brüt inşaat alanı</span><span className="font-medium text-stone-900">{formatNumber(metrics.grossArea, 2)} m²</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Toplam bağımsız bölüm</span><span className="font-medium text-stone-900">{formatNumber(metrics.totalUnitCount, 0)}</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Net satılabilir alan</span><span className="font-medium text-stone-900">{formatNumber(metrics.netSellableArea, 2)} m²</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Ortak alan</span><span className="font-medium text-stone-900">{formatNumber(metrics.commonArea, 2)} m²</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Doğrudan maliyet</span><span className="font-medium text-stone-900">{formatCurrency(metrics.directCost)}</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Genel gider</span><span className="font-medium text-stone-900">{formatCurrency(metrics.indirectCost)}</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Beklenmeyen gider</span><span className="font-medium text-stone-900">{formatCurrency(metrics.contingencyCost)}</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Ruhsat ve proje</span><span className="font-medium text-stone-900">{formatCurrency(inputs.permitAndProjectCost)}</span></div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2"><span className="text-stone-500">Finansman</span><span className="font-medium text-stone-900">{formatCurrency(inputs.financingCost)}</span></div>
-                <div className="min-[560px]:col-span-2 mt-1 border-t border-stone-200 pt-3">
-                  <div className="grid grid-cols-1 gap-2 min-[560px]:grid-cols-2">
-                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-900 px-3 py-2 text-white"><span className="text-stone-200">Kar haric hedef ciro</span><span className="font-semibold">{formatCurrency(metrics.targetSaleWithoutVat)}</span></div>
-                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-orange-50 px-3 py-2 ring-1 ring-orange-200"><span className="text-stone-600">KDV</span><span className="font-semibold text-stone-900">{formatCurrency(metrics.vatAmount)}</span></div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-              <h2 className="text-xl font-semibold text-stone-900">Blok Özetleri</h2>
-              <div className="mt-4 space-y-3">
-                {blockMetrics.map(block => (
-                  <div key={block.id} className="rounded-2xl border border-stone-200 p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-stone-900">{block.name}</div>
-                      <div className="text-sm font-medium text-stone-700">{formatCurrency(block.directCost)}</div>
-                    </div>
-                    <div className="mt-2 grid gap-2 text-sm text-stone-600 md:grid-cols-2">
-                      <div>Brüt alan: {formatNumber(block.grossArea, 2)} m²</div>
-                      <div>Net alan: {formatNumber(block.netSellableArea, 2)} m²</div>
-                      <div>Bağımsız bölüm: {formatNumber(block.unitCount, 0)}</div>
-                      <div>Brüt m² maliyeti: {formatCurrency(block.costPerGrossM2)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-stone-200">
-              <h2 className="text-xl font-semibold text-stone-900">Kategori Bazlı Maliyet</h2>
-              <div className="mt-3 grid grid-cols-1 gap-2 min-[560px]:grid-cols-2">
-                {Object.entries(metrics.categoryTotals).map(([category, total]) => {
-                  const ratio = metrics.directCost > 0 ? total / metrics.directCost : 0
-                  return (
-                    <div key={category} className="rounded-2xl bg-stone-50/80 px-3 py-2">
-                      <div className="mb-1 flex items-center justify-between gap-3 text-[13px]">
-                        <span className="text-stone-700">{category}</span>
-                        <span className="font-medium text-stone-900">{formatCurrency(total)}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-stone-200">
-                        <div className="h-1.5 rounded-full bg-orange-500" style={{ width: `${Math.min(ratio * 100, 100)}%` }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-stone-900">Kayıtlı Senaryolar</h2>
-                <div className="text-sm text-stone-500">Supabase üzerinde saklanır</div>
-              </div>
-              <div className="mt-4 space-y-3">
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                 {scenariosLoading && (
-                  <div className="rounded-2xl bg-stone-50 p-4 text-sm text-stone-500">
+                  <div className="p-4 text-center text-xs font-semibold text-stone-400 bg-stone-50 rounded-2xl">
                     Senaryolar yükleniyor...
                   </div>
                 )}
-                {savedScenarios.length === 0 && (
-                  <div className="rounded-2xl bg-stone-50 p-4 text-sm text-stone-500">
-                    Henüz kayıtlı senaryo yok.
+                {!scenariosLoading && savedScenarios.length === 0 && (
+                  <div className="p-4 text-center text-xs text-stone-400 bg-stone-50 border border-dashed border-stone-250 rounded-2xl">
+                    Henüz kayıtlı senaryo bulunamadı.
                   </div>
                 )}
                 {savedScenarios.map(scenario => {
                   const scenarioDirectCost = scenario.blocks
                     .map(createMetricsForBlock)
                     .reduce((sum, block) => sum + block.directCost, 0)
+                  const isActive = activeScenarioId === scenario.id
+
                   return (
                     <div
                       key={scenario.id}
-                      className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
-                        activeScenarioId === scenario.id
-                          ? 'border-emerald-400 bg-emerald-50'
-                          : 'border-stone-200 hover:border-orange-400 hover:bg-orange-50'
+                      className={`group flex flex-col gap-2.5 rounded-2xl border p-4 transition-all duration-300 ${
+                        isActive
+                          ? 'border-emerald-500 bg-emerald-50/70 shadow-sm ring-1 ring-emerald-500/20'
+                          : 'border-stone-200 bg-white hover:border-orange-350 hover:bg-orange-50/20 hover:shadow-sm'
                       }`}
                     >
                       <button
                         onClick={() => loadScenario(scenario)}
-                        className="min-w-0 flex-1 text-left"
+                        className="text-left w-full focus:outline-none"
                       >
-                        <div className="flex items-center gap-2 font-medium text-stone-900">
-                          <span>{scenario.inputs.scenarioName}</span>
-                          {activeScenarioId === scenario.id && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                              Yüklü
-                            </span>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-extrabold text-xs text-stone-850 uppercase tracking-wide group-hover:text-orange-950 transition-colors">
+                            {scenario.inputs.scenarioName}
+                          </div>
+                          {isActive && (
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse mt-1 shrink-0" />
                           )}
                         </div>
-                        <div className="text-xs text-stone-500">
-                          {new Date(scenario.savedAt).toLocaleString('tr-TR')} - {scenario.blocks.length} blok
+                        <div className="text-[10px] text-stone-400 font-bold mt-1">
+                          {new Date(scenario.savedAt).toLocaleDateString('tr-TR')} • {scenario.blocks.length} Blok
                         </div>
                       </button>
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm font-medium text-stone-700">{formatCurrency(scenarioDirectCost)}</div>
+                      
+                      <div className="flex items-center justify-between border-t border-stone-100/60 pt-2 mt-1">
+                        <span className="text-[11px] font-bold text-stone-700">
+                          {formatCompactCurrency(scenarioDirectCost)}
+                        </span>
                         <button
                           onClick={() => deleteScenario(scenario.id)}
-                          className="rounded-lg px-3 py-2 text-xs text-red-600 hover:bg-red-100"
+                          className="text-[10px] font-extrabold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg px-2.5 py-1.5 transition-all"
                         >
                           Sil
                         </button>
@@ -1957,10 +1653,1039 @@ export default function ConstructionCostsPage() {
                   )
                 })}
               </div>
-            </section>
+            </div>
+
+            {/* RIGHT WORKSPACE: Step panels */}
+            <div className="flex-1 min-w-0 w-full space-y-6">
+              
+              {/* STEP 1: General Parameters */}
+              {activeTab === 'varsayimlar' && (
+                <div className="space-y-6">
+                  <div className="rounded-3xl bg-white p-6 shadow-sm border border-stone-200/60">
+                    <div className="border-b border-stone-100 pb-4 mb-6">
+                      <h2 className="text-xl font-bold text-stone-900 tracking-tight">Genel Proje Parametreleri</h2>
+                      <p className="text-sm text-stone-500 mt-1">Projenin arsa, finansal gider oranları, kâr marjı ve KDV oranlarını yönetin.</p>
+                    </div>
+
+                    <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                      {SCENARIO_FIELDS.map(field => {
+                        const value = inputs[field.key]
+                        return (
+                          <div key={field.key} className="flex flex-col rounded-2xl border border-stone-200 bg-stone-50/50 p-4 transition-all hover:bg-stone-50 focus-within:border-stone-450 focus-within:ring-2 focus-within:ring-stone-100">
+                            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">{field.label}</span>
+                            <input
+                              type={field.type === 'text' ? 'text' : 'number'}
+                              step={getInputStep(field.type)}
+                              inputMode={getInputMode(field.type)}
+                              value={
+                                field.type === 'text'
+                                  ? String(value)
+                                  : getNumericInputValue(Number(value || 0), field.type)
+                              }
+                              onChange={e =>
+                                updateInput(
+                                  field.key,
+                                  parseInputValue(e.target.value, field.type)
+                                )
+                              }
+                              className="mt-2 w-full border-none bg-transparent p-0 text-sm font-bold text-stone-900 focus:outline-none focus:ring-0"
+                            />
+                            <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
+                              <span className="truncate max-w-[70%]">{field.description}</span>
+                              <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">{getFieldHelper(value, field.type)}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="flex justify-end border-t border-stone-100 pt-6 mt-8">
+                      <button
+                        onClick={() => setActiveTab('bloklar')}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-stone-900 hover:bg-stone-850 hover:shadow-md px-6 py-3.5 text-sm font-bold text-white transition-all duration-200"
+                      >
+                        <span>Sonraki Aşama: Blok Metrajları</span>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Blocks & Metraj Kalemleri */}
+              {activeTab === 'bloklar' && (
+                <div className="space-y-6">
+                  
+                  {/* Block Selection Tabs */}
+                  <div className="rounded-3xl bg-white p-5 shadow-sm border border-stone-200/60">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3 gap-2">
+                        <div>
+                          <h2 className="text-lg font-bold text-stone-900 tracking-tight">Projedeki Bloklar</h2>
+                          <p className="text-xs font-semibold text-stone-400">Aşağıdaki blok sekmelerini tıklayarak metraj düzenleyin.</p>
+                        </div>
+                        <button
+                          onClick={addBlock}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all"
+                        >
+                          + Blok Ekle
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {blocks.map((block, idx) => {
+                          const isBlockSelected = selectedBlockId === block.id
+                          const blockDirectCost = blockMetrics.find(m => m.id === block.id)?.directCost || 0
+                          
+                          return (
+                            <div key={block.id} className="flex items-center">
+                              <button
+                                onClick={() => setSelectedBlockId(block.id)}
+                                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-xs font-bold transition-all ${
+                                  isBlockSelected
+                                    ? 'bg-stone-900 text-white shadow-md'
+                                    : 'bg-stone-50 text-stone-600 border border-stone-200 hover:bg-stone-100/80'
+                                }`}
+                              >
+                                <span>{block.name}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                                  isBlockSelected ? 'bg-orange-600 text-white' : 'bg-stone-200 text-stone-700'
+                                }`}>
+                                  {formatCompactCurrency(blockDirectCost)}
+                                </span>
+                              </button>
+                              
+                              {/* Extra control buttons visible next to selected block tab */}
+                              {isBlockSelected && (
+                                <div className="flex items-center gap-1.5 ml-1.5 border border-stone-200/60 bg-stone-50/50 rounded-2xl p-1 shrink-0">
+                                  <button
+                                    onClick={() => duplicateBlock(block.id)}
+                                    title="Bloğu maliyet kalemiyle kopyala"
+                                    className="p-1.5 rounded-xl text-[10px] font-bold text-stone-700 hover:bg-stone-200/80 active:scale-95 transition-all"
+                                  >
+                                    Çoğalt
+                                  </button>
+                                  {blocks.length > 1 && (
+                                    <button
+                                      onClick={() => removeBlock(block.id)}
+                                      title="Bloğu sil"
+                                      className="p-1.5 rounded-xl text-[10px] font-bold text-red-600 hover:bg-red-50 active:scale-95 transition-all"
+                                    >
+                                      Sil
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selected Block Parameters & Live metrics */}
+                  <div className="rounded-3xl bg-white p-6 shadow-sm border border-stone-200/60 space-y-6">
+                    <div className="border-b border-stone-100 pb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div>
+                        <h3 className="text-base font-extrabold text-stone-900 tracking-tight">{selectedBlock.name} Yapı Ayarları</h3>
+                        <p className="text-xs font-medium text-stone-400 mt-0.5">Bu bloğun kat, daire ve alan parametreleri.</p>
+                      </div>
+                      
+                      {/* Metric widgets inside card */}
+                      <div className="grid grid-cols-2 md:flex md:items-center gap-3">
+                        <div className="rounded-2xl bg-stone-50 border border-stone-200/50 p-3 min-w-[120px] text-center md:text-left">
+                          <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">M2 Brüt Alan</div>
+                          <div className="text-sm font-extrabold text-stone-850 mt-0.5">{formatNumber(currentMetrics?.grossArea || 0, 1)} m²</div>
+                        </div>
+                        <div className="rounded-2xl bg-stone-50 border border-stone-200/50 p-3 min-w-[120px] text-center md:text-left">
+                          <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">M2 Net Alan</div>
+                          <div className="text-sm font-extrabold text-stone-850 mt-0.5">{formatNumber(currentMetrics?.netSellableArea || 0, 1)} m²</div>
+                        </div>
+                        <div className="rounded-2xl bg-stone-50 border border-stone-200/50 p-3 min-w-[120px] text-center md:text-left">
+                          <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Direkt Maliyet</div>
+                          <div className="text-sm font-extrabold text-orange-600 mt-0.5">{formatCompactCurrency(currentMetrics?.directCost || 0)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                      {BLOCK_FIELDS.map(field => {
+                        const value = selectedBlock[field.key]
+                        return (
+                          <div key={field.key} className="flex flex-col rounded-2xl border border-stone-200 bg-stone-50/50 p-4 transition-all hover:bg-stone-50 focus-within:border-stone-450 focus-within:ring-2 focus-within:ring-stone-100">
+                            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">{field.label}</span>
+                            <input
+                              type={field.type === 'text' ? 'text' : 'number'}
+                              step={getInputStep(field.type)}
+                              inputMode={getInputMode(field.type)}
+                              value={
+                                field.type === 'text'
+                                  ? String(value)
+                                  : getNumericInputValue(Number(value || 0), field.type)
+                              }
+                              onChange={e =>
+                                updateBlock(
+                                  selectedBlock.id,
+                                  field.key,
+                                  parseInputValue(e.target.value, field.type)
+                                )
+                              }
+                              className="mt-2 w-full border-none bg-transparent p-0 text-sm font-bold text-stone-900 focus:outline-none focus:ring-0"
+                            />
+                            <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
+                              <span className="truncate max-w-[70%]">{field.description}</span>
+                              <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">{getFieldHelper(value, field.type)}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Metraj ve Maliyet Kalemleri spreadsheet Editor */}
+                  <div className="rounded-3xl bg-white shadow-sm border border-stone-200/60 overflow-hidden">
+                    <div className="p-6 border-b border-stone-100 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                      <div>
+                        <h3 className="text-base font-extrabold text-stone-900 tracking-tight">Metraj Maliyet Tablosu</h3>
+                        <p className="text-xs font-medium text-stone-400 mt-0.5">Seçili bloğun kaba, ince ve altyapı kalemlerini birim ve birim fiyatlarla girin.</p>
+                      </div>
+
+                      {/* Fast templates loaders */}
+                      <div className="flex flex-wrap gap-1.5 xl:justify-end max-w-full">
+                        <button
+                          onClick={() => addTemplateToBlock(selectedBlock.id, 'hafriyat')}
+                          className="rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-[11px] font-bold text-stone-700 px-3 py-2 transition-all"
+                        >
+                          Hafriyat Şablonu
+                        </button>
+                        <button
+                          onClick={() => addTemplateToBlock(selectedBlock.id, 'kaba')}
+                          className="rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-[11px] font-bold text-stone-700 px-3 py-2 transition-all"
+                        >
+                          Kaba Şablonu
+                        </button>
+                        <button
+                          onClick={() => addTemplateToBlock(selectedBlock.id, 'ince')}
+                          className="rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-[11px] font-bold text-stone-700 px-3 py-2 transition-all"
+                        >
+                          İnce Şablonu
+                        </button>
+                        <button
+                          onClick={() => addTemplateToBlock(selectedBlock.id, 'mekanik')}
+                          className="rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-[11px] font-bold text-stone-700 px-3 py-2 transition-all"
+                        >
+                          Mekanik & Elektrik
+                        </button>
+                        <button
+                          onClick={() => addTemplateToBlock(selectedBlock.id, 'cevre')}
+                          className="rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-[11px] font-bold text-stone-700 px-3 py-2 transition-all"
+                        >
+                          Çevre Şablonu
+                        </button>
+                        <button
+                          onClick={() => addItemToBlock(selectedBlock.id, activeSubCategory || activeMainCategory || 'Diger')}
+                          className="rounded-xl bg-orange-600 hover:bg-orange-500 text-[11px] font-bold text-white px-3.5 py-2 shadow-sm transition-all"
+                        >
+                          + Kalem Ekle
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Double-Decker Category Panels */}
+                    <div className="bg-stone-50/50 border-b border-stone-100 p-4 space-y-4">
+                      
+                      {/* Main Category pill selector */}
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400">Ana Kategori</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {mainCategories.map(category => {
+                            const isMainSelected = activeMainCategory === category
+                            const accent = CATEGORY_ACCENT_COLORS[category as MainCategory] || { activeBg: 'bg-stone-850', text: 'text-white' }
+                            
+                            return (
+                              <button
+                                key={category}
+                                onClick={() => {
+                                  const nextSub = getSubCategoriesForBlock(selectedBlock, category)[0] || ''
+                                  setActiveMainCategoryByBlock(prev => ({
+                                    ...prev,
+                                    [selectedBlock.id]: category,
+                                  }))
+                                  setActiveSubCategoryByBlock(prev => ({
+                                    ...prev,
+                                    [selectedBlock.id]: nextSub,
+                                  }))
+                                  syncSubCategoryDraft(selectedBlock.id, category, nextSub)
+                                }}
+                                className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                                  isMainSelected
+                                    ? `${accent.activeBg} ${accent.text} shadow-sm`
+                                    : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+                                }`}
+                              >
+                                {getMainCategoryLabel(category)}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Sub-Category pills */}
+                      <div className="space-y-2 border-t border-stone-100 pt-3">
+                        <div className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400">
+                          Alt Kategori (Çift tıkla düzenle / Sağ tıkla seçenekleri gör)
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {subCategories.map(category => {
+                            const isSubSelected = activeSubCategory === category
+                            const accent = getSubCategoryAccent(category)
+
+                            return editingSubCategoryByBlock[selectedBlock.id] === category ? (
+                              <input
+                                key={category}
+                                autoFocus
+                                value={subCategoryDraftByBlock[selectedBlock.id] ?? getSubCategoryLabel(category, activeMainCategory)}
+                                onChange={e =>
+                                  setSubCategoryDraftByBlock(prev => ({
+                                    ...prev,
+                                    [selectedBlock.id]: e.target.value,
+                                  }))
+                                }
+                                onBlur={() => commitInlineSubCategoryEdit(selectedBlock.id, activeMainCategory, category)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    commitInlineSubCategoryEdit(selectedBlock.id, activeMainCategory, category)
+                                  }
+                                  if (e.key === 'Escape') {
+                                    syncSubCategoryDraft(selectedBlock.id, activeMainCategory, category)
+                                    stopInlineSubCategoryEdit(selectedBlock.id)
+                                  }
+                                }}
+                                className="min-w-[150px] rounded-xl border border-orange-500 bg-white px-3 py-1.5 text-xs font-bold text-stone-700 outline-none ring-2 ring-orange-100"
+                              />
+                            ) : (
+                              <button
+                                key={category}
+                                onClick={() => {
+                                  setActiveSubCategoryByBlock(prev => ({
+                                    ...prev,
+                                    [selectedBlock.id]: category,
+                                  }))
+                                  syncSubCategoryDraft(selectedBlock.id, activeMainCategory, category)
+                                }}
+                                onDoubleClick={() => startInlineSubCategoryEdit(selectedBlock.id, activeMainCategory, category)}
+                                onContextMenu={event => {
+                                  event.preventDefault()
+                                  setActiveSubCategoryByBlock(prev => ({
+                                    ...prev,
+                                    [selectedBlock.id]: category,
+                                  }))
+                                  syncSubCategoryDraft(selectedBlock.id, activeMainCategory, category)
+                                  setSubCategoryContextMenu({
+                                    blockId: selectedBlock.id,
+                                    mainCategory: activeMainCategory,
+                                    category,
+                                    x: event.clientX,
+                                    y: event.clientY,
+                                  })
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
+                                  isSubSelected ? accent.active : accent.idle
+                                }`}
+                              >
+                                <span className={`h-2 w-2 rounded-full ${accent.dot}`}></span>
+                                <span>{getSubCategoryLabel(category, activeMainCategory)}</span>
+                              </button>
+                            )
+                          })}
+                          
+                          {subCategories.length === 0 && (
+                            <span className="text-xs text-stone-400 bg-stone-100 border border-stone-200/50 rounded-xl px-3 py-1.5">
+                              Bu ana kategori altında alt sekme bulunmuyor.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right click actions popup */}
+                      {subCategoryContextMenu?.blockId === selectedBlock.id && (
+                        <div
+                          className="fixed z-50 min-w-[160px] rounded-2xl border border-stone-200 bg-white p-2 shadow-xl"
+                          style={{ left: subCategoryContextMenu.x, top: subCategoryContextMenu.y }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => {
+                              startInlineSubCategoryEdit(
+                                subCategoryContextMenu.blockId,
+                                subCategoryContextMenu.mainCategory,
+                                subCategoryContextMenu.category
+                              )
+                              setSubCategoryContextMenu(null)
+                            }}
+                            className="flex w-full rounded-xl px-3 py-2 text-left text-xs font-bold text-stone-700 hover:bg-stone-50"
+                          >
+                            Yeniden Adlandır
+                          </button>
+                          <button
+                            onClick={() => {
+                              duplicateSubCategory(
+                                subCategoryContextMenu.blockId,
+                                subCategoryContextMenu.mainCategory,
+                                subCategoryContextMenu.category
+                              )
+                              setSubCategoryContextMenu(null)
+                            }}
+                            className="flex w-full rounded-xl px-3 py-2 text-left text-xs font-bold text-stone-700 hover:bg-stone-50"
+                          >
+                            Çoğalt
+                          </button>
+                          <button
+                            onClick={() => {
+                              deleteSubCategory(subCategoryContextMenu.blockId, subCategoryContextMenu.category)
+                              setSubCategoryContextMenu(null)
+                            }}
+                            className="flex w-full rounded-xl px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50"
+                          >
+                            Tümünü Sil
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Input controls to add/rename subcategories */}
+                      <div className="flex flex-col md:flex-row gap-4 border-t border-stone-150 pt-4">
+                        {activeSubCategory && (
+                          <div className="flex-1 space-y-1.5">
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400">Seçili Sekmeyi Düzenle</span>
+                            <div className="flex gap-2">
+                              <input
+                                value={subCategoryDraftByBlock[selectedBlock.id] ?? getSubCategoryLabel(activeSubCategory, activeMainCategory)}
+                                onChange={e =>
+                                  setSubCategoryDraftByBlock(prev => ({
+                                    ...prev,
+                                    [selectedBlock.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Seçili alt sekme adını değiştir"
+                                className="flex-1 rounded-xl border border-stone-250 bg-white px-3 py-2 text-xs font-bold text-stone-800 focus:border-stone-450 focus:outline-none"
+                              />
+                              <button
+                                onClick={() =>
+                                  renameSubCategory(
+                                    selectedBlock.id,
+                                    activeMainCategory,
+                                    activeSubCategory,
+                                    subCategoryDraftByBlock[selectedBlock.id] ?? ''
+                                  )
+                                }
+                                className="rounded-xl bg-stone-900 hover:bg-stone-850 px-4 py-2 text-xs font-bold text-white transition-all"
+                              >
+                                Güncelle
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex-1 space-y-1.5">
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400">Yeni Alt Sekme Ekle</span>
+                          <div className="flex gap-2">
+                            <input
+                              value={newSubCategoryByBlock[selectedBlock.id] || ''}
+                              onChange={e =>
+                                setNewSubCategoryByBlock(prev => ({
+                                  ...prev,
+                                  [selectedBlock.id]: e.target.value,
+                                }))
+                              }
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  createSubCategory(selectedBlock.id, activeMainCategory, newSubCategoryByBlock[selectedBlock.id] || '')
+                                }
+                              }}
+                              placeholder="Örnek: Kaba Kalıp, Tesisat İşleri..."
+                              className="flex-1 rounded-xl border border-stone-250 bg-white px-3 py-2 text-xs font-bold text-stone-800 focus:border-stone-450 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => createSubCategory(selectedBlock.id, activeMainCategory, newSubCategoryByBlock[selectedBlock.id] || '')}
+                              className="rounded-xl bg-orange-600 hover:bg-orange-500 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all"
+                            >
+                              Yeni Sekme Aç
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Table Spreadsheet layout */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-stone-50 border-b border-stone-200 text-[10px] font-extrabold uppercase tracking-wider text-stone-450">
+                            <th className="px-6 py-3.5 w-[35%]">İş Kalemi Açıklaması</th>
+                            <th className="px-4 py-3.5 w-[25%]">Kategori</th>
+                            <th className="px-4 py-3.5 w-[10%] text-center">Birim</th>
+                            <th className="px-4 py-3.5 w-[10%] text-right">Metraj</th>
+                            <th className="px-4 py-3.5 w-[10%] text-right">Birim Fiyat</th>
+                            <th className="px-4 py-3.5 w-[15%] text-right">Toplam Tutar</th>
+                            <th className="px-4 py-3.5 w-[5%] text-center">İşlem</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {visibleItems.map(item => {
+                            const itemTotal = (item.quantity || 0) * (item.unitPrice || 0)
+                            return (
+                              <tr key={item.id} className="hover:bg-stone-50/40 transition-colors">
+                                {/* Item Name */}
+                                <td className="px-6 py-2.5">
+                                  <input
+                                    value={item.name}
+                                    onChange={e => updateBlockItem(selectedBlock.id, item.id, 'name', e.target.value)}
+                                    placeholder="İş kalemini girin..."
+                                    className="w-full border-none bg-transparent p-1 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-1 focus:ring-orange-500 rounded"
+                                  />
+                                </td>
+                                
+                                {/* Item Category */}
+                                <td className="px-4 py-2.5">
+                                  <input
+                                    value={item.category}
+                                    onChange={e => updateBlockItem(selectedBlock.id, item.id, 'category', e.target.value)}
+                                    className="w-full border-none bg-transparent p-1 text-xs font-semibold text-stone-500 focus:outline-none focus:ring-1 focus:ring-orange-500 rounded"
+                                  />
+                                </td>
+
+                                {/* Unit */}
+                                <td className="px-4 py-2.5">
+                                  <input
+                                    value={item.unit}
+                                    onChange={e => updateBlockItem(selectedBlock.id, item.id, 'unit', e.target.value)}
+                                    className="w-full border-none bg-transparent p-1 text-xs font-bold text-stone-600 text-center focus:outline-none focus:ring-1 focus:ring-orange-500 rounded"
+                                  />
+                                </td>
+
+                                {/* Quantity */}
+                                <td className="px-4 py-2.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={item.quantity}
+                                    onChange={e => updateBlockItem(selectedBlock.id, item.id, 'quantity', parseLocalizedNumber(e.target.value))}
+                                    className="w-full border-none bg-transparent p-1 text-xs font-bold text-stone-800 text-right focus:outline-none focus:ring-1 focus:ring-orange-500 rounded"
+                                  />
+                                </td>
+
+                                {/* Unit Price */}
+                                <td className="px-4 py-2.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={item.unitPrice}
+                                    onChange={e => updateBlockItem(selectedBlock.id, item.id, 'unitPrice', parseLocalizedNumber(e.target.value))}
+                                    className="w-full border-none bg-transparent p-1 text-xs font-bold text-stone-850 text-right focus:outline-none focus:ring-1 focus:ring-orange-500 rounded"
+                                  />
+                                </td>
+
+                                {/* Total Price */}
+                                <td className="px-4 py-2.5 text-right font-extrabold text-xs text-stone-900">
+                                  {formatCurrency(itemTotal)}
+                                </td>
+
+                                {/* Delete */}
+                                <td className="px-4 py-2.5 text-center">
+                                  <button
+                                    onClick={() => removeItemFromBlock(selectedBlock.id, item.id)}
+                                    className="text-stone-400 hover:text-red-500 p-1 transition-colors"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+
+                          {visibleItems.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="px-6 py-12 text-center text-xs font-medium text-stone-400 bg-stone-50/50">
+                                Bu alt kategoride kalem bulunmuyor. Yukarıdan hızlı şablon yükleyebilir ya da "Kalem Ekle" tuşuyla yeni satır ekleyebilirsiniz.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Table Footer subtotal summary */}
+                    {visibleItems.length > 0 && (
+                      <div className={`flex items-center justify-between border-t px-6 py-4 border-stone-200 ${getSubtotalRowClass(activeMainCategory)}`}>
+                        <span className="text-xs font-bold uppercase tracking-wider">{activeSubCategory || 'Seçili Kategori Toplamı'}</span>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[10px] font-semibold opacity-70">Toplam:</span>
+                          <span className="text-base font-extrabold">{formatCurrency(visibleSubtotal)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Navigation footer buttons */}
+                  <div className="flex justify-between items-center bg-white p-5 rounded-3xl border border-stone-200/60 shadow-sm mt-6">
+                    <button
+                      onClick={() => setActiveTab('varsayimlar')}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-white hover:bg-stone-50 border border-stone-200 px-5 py-3 text-xs font-bold text-stone-700 transition-all duration-200"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      <span>Önceki Aşama: Genel Parametreler</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => setActiveTab('analiz')}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-stone-900 hover:bg-stone-850 hover:shadow-md px-5 py-3 text-xs font-bold text-white transition-all duration-200"
+                    >
+                      <span>Sonraki Aşama: Finansal Raporlama</span>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {/* STEP 3: Maliyet Analizi & Raporlama */}
+              {activeTab === 'analiz' && (
+                <div className="space-y-8">
+                  
+                  {/* Executive Summary Metrics Grid */}
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    
+                    {/* Gross Area */}
+                    <div className="rounded-3xl bg-white p-5 border border-stone-200/60 shadow-[0_4px_20px_rgb(0,0,0,0.01)] hover:-translate-y-1 transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">İnşaat Alanı (Brüt)</span>
+                        <div className="p-2 bg-stone-50 rounded-xl border border-stone-200/50">
+                          <svg className="h-5 w-5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <span className="text-xl font-extrabold text-stone-850">{formatNumber(metrics.grossArea, 1)} m²</span>
+                        <div className="text-[10px] font-bold text-stone-400 mt-1">Net: {formatNumber(metrics.netSellableArea, 1)} m² ({metrics.totalUnitCount} Daire)</div>
+                      </div>
+                    </div>
+
+                    {/* Total Budget */}
+                    <div className="rounded-3xl bg-white p-5 border border-stone-200/60 shadow-[0_4px_20px_rgb(0,0,0,0.01)] hover:-translate-y-1 transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Toplam Maliyet (Bütçe)</span>
+                        <div className="p-2 bg-orange-50 rounded-xl border border-orange-100">
+                          <svg className="h-5 w-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <span className="text-xl font-extrabold text-stone-850">{formatCompactCurrency(metrics.subtotalCost)}</span>
+                        <div className="text-[10px] font-bold text-orange-600 mt-1">Direkt: {formatCompactCurrency(metrics.directCost)}</div>
+                      </div>
+                    </div>
+
+                    {/* m2 cost */}
+                    <div className="rounded-3xl bg-white p-5 border border-stone-200/60 shadow-[0_4px_20px_rgb(0,0,0,0.01)] hover:-translate-y-1 transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Birim m² Maliyeti</span>
+                        <div className="p-2 bg-amber-50 rounded-xl border border-amber-100">
+                          <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <span className="text-xl font-extrabold text-stone-850">{formatCurrency(metrics.costPerGrossM2)}</span>
+                        <div className="text-[10px] font-bold text-stone-400 mt-1">Net m²: {formatCurrency(metrics.costPerNetM2)} / m²</div>
+                      </div>
+                    </div>
+
+                    {/* Target sale ciro */}
+                    <div className="rounded-3xl bg-white p-5 border border-stone-200/60 shadow-[0_4px_20px_rgb(0,0,0,0.01)] hover:-translate-y-1 transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Hedef Satış Cirosu</span>
+                        <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-100">
+                          <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <span className="text-xl font-extrabold text-stone-850">{formatCompactCurrency(metrics.targetSaleWithVat)}</span>
+                        <div className="text-[10px] font-bold text-emerald-600 mt-1">Daire Başı Ciro: {formatCompactCurrency(metrics.salePerUnit)}</div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Graphs Panel Grid */}
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    
+                    {/* SVG Donut Chart for Categories */}
+                    <div className="rounded-3xl bg-white p-6 border border-stone-200/60 shadow-sm space-y-4">
+                      <div>
+                        <h4 className="text-sm font-extrabold text-stone-800 uppercase tracking-wider">Kategori Bazlı Maliyet Dağılımı</h4>
+                        <p className="text-xs text-stone-400 font-semibold mt-0.5">Toplam doğrudan maliyetin ana kategorilere dağılım oranları.</p>
+                      </div>
+                      <div className="pt-2">
+                        <DonutChart data={donutData} />
+                      </div>
+                    </div>
+
+                    {/* SVG Bar Chart for Blocks */}
+                    <div className="rounded-3xl bg-white p-6 border border-stone-200/60 shadow-sm space-y-4">
+                      <div>
+                        <h4 className="text-sm font-extrabold text-stone-800 uppercase tracking-wider">Blok Maliyet Karşılaştırması</h4>
+                        <p className="text-xs text-stone-400 font-semibold mt-0.5">Projedeki blokların doğrudan şantiye maliyeti karşılaştırması.</p>
+                      </div>
+                      <div className="pt-2">
+                        {barData.length > 0 ? (
+                          <BarChart data={barData} />
+                        ) : (
+                          <div className="flex h-52 items-center justify-center text-xs font-semibold text-stone-400 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
+                            Gösterilecek blok bulunmuyor.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Detailed Analysis Reports tables */}
+                  <div className="rounded-3xl bg-white border border-stone-200/60 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <h4 className="text-base font-extrabold text-stone-900 tracking-tight">Finansal Özet Tabloları</h4>
+                        <p className="text-xs font-medium text-stone-400 mt-0.5">Projenin fizibilite raporu ve m² birim analiz kırılımları.</p>
+                      </div>
+                      
+                      <button
+                        onClick={() => window.print()}
+                        className="inline-flex items-center gap-2 rounded-xl bg-stone-900 hover:bg-stone-800 hover:shadow-md px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-3a2 2 0 00-2-2H9a2 2 0 00-2 2v3a2 2 0 002 2zm5-12V5a3 3 0 00-3-3H9a3 3 0 00-3 3v4" />
+                        </svg>
+                        <span>PDF / Rapor Çıktısı Al</span>
+                      </button>
+                    </div>
+
+                    <div className="p-6 grid gap-8 md:grid-cols-2">
+                      {/* Left: General Project feasibility summary */}
+                      <div className="space-y-4">
+                        <div className="text-xs font-extrabold text-stone-400 uppercase tracking-widest border-b border-stone-100 pb-1.5">Fizibilite ve Genel Giderler</div>
+                        <div className="space-y-2 text-xs font-semibold text-stone-700">
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Doğrudan Şantiye Maliyeti</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.directCost)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Genel Giderler (%{formatNumber(inputs.indirectCostRate * 100, 1)})</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.indirectCost)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Beklenmeyen Gider Sapma Payı (%{formatNumber(inputs.contingencyRate * 100, 1)})</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.contingencyCost)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Ruhsat, Belediye ve Proje Bedelleri</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(inputs.permitAndProjectCost)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Finansman ve Kredi Faiz Gideri</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(inputs.financingCost)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-900 text-white rounded-xl">
+                            <span>Toplam Proje Maliyet Bütçesi</span>
+                            <span className="font-extrabold">{formatCurrency(metrics.subtotalCost)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Revenue metrics */}
+                      <div className="space-y-4">
+                        <div className="text-xs font-extrabold text-stone-400 uppercase tracking-widest border-b border-stone-100 pb-1.5">Gelir Hedefi ve Birim Paylaşım</div>
+                        <div className="space-y-2 text-xs font-semibold text-stone-700">
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Hedef Kâr Oranı (%{formatNumber(inputs.targetProfitRate * 100, 1)})</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.subtotalCost * inputs.targetProfitRate)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>KDV Hariç Hedef Satış Cirosu</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.targetSaleWithoutVat)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>KDV Toplamı (%{formatNumber(inputs.vatRate * 100, 1)})</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.vatAmount)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-orange-50 border border-orange-200/50 rounded-xl text-orange-950">
+                            <span>KDV Dahil Hedef Satış Toplamı</span>
+                            <span className="font-extrabold">{formatCurrency(metrics.targetSaleWithVat)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Ortalama Brüt m² Satış Fiyatı</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.targetSaleWithVat / Math.max(metrics.grossArea, 1))} / m²</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2.5 bg-stone-50 rounded-xl">
+                            <span>Ortalama Bağımsız Bölüm Satış Fiyatı</span>
+                            <span className="font-extrabold text-stone-900">{formatCurrency(metrics.salePerUnit)} / Daire</span>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Block Summary details table */}
+                    <div className="p-6 border-t border-stone-100 space-y-4">
+                      <div className="text-xs font-extrabold text-stone-400 uppercase tracking-widest">Detaylı Blok Analiz Listesi</div>
+                      <div className="overflow-x-auto rounded-2xl border border-stone-200">
+                        <table className="w-full text-left text-xs font-semibold border-collapse">
+                          <thead>
+                            <tr className="bg-stone-50 border-b border-stone-200 text-stone-450 text-[10px] font-extrabold uppercase tracking-wider">
+                              <th className="px-6 py-3">Blok Adı</th>
+                              <th className="px-4 py-3 text-right">Brüt İnşaat (m²)</th>
+                              <th className="px-4 py-3 text-right">Net Satılabilir (m²)</th>
+                              <th className="px-4 py-3 text-right">Daire Adedi</th>
+                              <th className="px-4 py-3 text-right">Doğrudan Maliyet</th>
+                              <th className="px-4 py-3 text-right">Brüt m² Maliyeti</th>
+                              <th className="px-4 py-3 text-right">Net m² Maliyeti</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-stone-100 text-stone-700">
+                            {blockMetrics.map(block => (
+                              <tr key={block.id} className="hover:bg-stone-50/50">
+                                <td className="px-6 py-3 font-extrabold text-stone-900">{block.name}</td>
+                                <td className="px-4 py-3 text-right">{formatNumber(block.grossArea, 1)} m²</td>
+                                <td className="px-4 py-3 text-right">{formatNumber(block.netSellableArea, 1)} m²</td>
+                                <td className="px-4 py-3 text-right">{block.unitCount} Adet</td>
+                                <td className="px-4 py-3 text-right font-bold text-stone-850">{formatCurrency(block.directCost)}</td>
+                                <td className="px-4 py-3 text-right">{formatCurrency(block.costPerGrossM2)} / m²</td>
+                                <td className="px-4 py-3 text-right">{formatCurrency(block.costPerNetM2)} / m²</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Back button to block inputs */}
+                  <div className="flex justify-start bg-white p-5 rounded-3xl border border-stone-200/60 shadow-sm mt-6">
+                    <button
+                      onClick={() => setActiveTab('bloklar')}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-white hover:bg-stone-50 border border-stone-200 px-5 py-3 text-xs font-bold text-stone-700 transition-all duration-200"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      <span>Önceki Aşama: Blok Metraj Düzenleme</span>
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+
           </div>
+
         </div>
       </div>
+
+      {/* ==================== A4 PRINT OUTPUT SHEET ==================== */}
+      <div className="print-only bg-white text-stone-900 p-0 font-sans">
+        <div className="space-y-6">
+          
+          {/* Header Title */}
+          <div className="text-center border-b-2 border-stone-900 pb-3">
+            <h1 className="text-xl font-bold uppercase tracking-wider text-stone-900">İNŞAAT YATIRIM VE MALİYET FİZİBİLİTE RAPORU</h1>
+            <div className="text-[10px] text-stone-500 font-bold mt-1 uppercase">
+              Rapor Tarihi: {new Date().toLocaleDateString('tr-TR')} • Proje Adı: {inputs.scenarioName}
+            </div>
+          </div>
+
+          {/* Project Parameter Summary Table */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-stone-700 border-b border-stone-300 pb-1 mb-2">1. PROJE GENEL PARAMETRELERİ</div>
+            <table className="w-full border-collapse border border-stone-300 text-[10px]">
+              <tbody>
+                <tr>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold w-1/4">Senaryo Adı:</td>
+                  <td className="border border-stone-300 px-2 py-1 w-1/4 font-semibold">{inputs.scenarioName}</td>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold w-1/4">Genel Gider Oranı:</td>
+                  <td className="border border-stone-300 px-2 py-1 w-1/4 font-semibold">%{formatNumber(inputs.indirectCostRate * 100, 1)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold">Arsa Toplam Alanı:</td>
+                  <td className="border border-stone-300 px-2 py-1 font-semibold">{formatNumber(inputs.landArea, 1)} m²</td>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold">Beklenmeyen Gider Oranı:</td>
+                  <td className="border border-stone-300 px-2 py-1 font-semibold">%{formatNumber(inputs.contingencyRate * 100, 1)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold">Ortak Alan Oranı Hedefi:</td>
+                  <td className="border border-stone-300 px-2 py-1 font-semibold">%{formatNumber(inputs.commonAreaRatio * 100, 1)}</td>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold">Hedef Kâr Marjı:</td>
+                  <td className="border border-stone-300 px-2 py-1 font-semibold">%{formatNumber(inputs.targetProfitRate * 100, 1)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold">KDV Oranı:</td>
+                  <td className="border border-stone-300 px-2 py-1 font-semibold">%{formatNumber(inputs.vatRate * 100, 1)}</td>
+                  <td className="border border-stone-300 bg-stone-50 px-2 py-1 font-bold">Ruhsat & Proje Maliyeti:</td>
+                  <td className="border border-stone-300 px-2 py-1 font-semibold">{formatCurrency(inputs.permitAndProjectCost)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Feasibility cost Summary Table */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-stone-700 border-b border-stone-300 pb-1 mb-2">2. MALİYET VE CİRO FİZİBİLİTESİ</div>
+            <table className="w-full border-collapse border border-stone-300 text-[10px]">
+              <thead>
+                <tr className="bg-stone-100 text-left">
+                  <th className="border border-stone-300 px-3 py-1.5 font-bold">Maliyet Kalemi Ayrıntısı</th>
+                  <th className="border border-stone-300 px-3 py-1.5 text-right font-bold w-[35%]">Tutar (TL)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">Doğrudan İnşaat / Şantiye Yapım Gideri</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(metrics.directCost)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">Şantiye Genel Gider Payı</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(metrics.indirectCost)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">Beklenmeyen Gider / Risk Sapma Payı</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(metrics.contingencyCost)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">Ruhsat, Harç ve Proje Hazırlık Giderleri</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(inputs.permitAndProjectCost)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">Proje Finansman & Faiz Maliyeti</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(inputs.financingCost)}</td>
+                </tr>
+                <tr className="bg-stone-50 font-bold">
+                  <td className="border border-stone-300 px-3 py-1 text-stone-900 font-extrabold">TOPLAM PROJE YAPIM BÜTÇESİ (KDV Hariç)</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right text-stone-900 font-extrabold">{formatCurrency(metrics.subtotalCost)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">Kâr Hedefi (%{formatNumber(inputs.targetProfitRate * 100, 1)})</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(metrics.subtotalCost * inputs.targetProfitRate)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-stone-300 px-3 py-1 font-semibold">KDV Toplamı (%{formatNumber(inputs.vatRate * 100, 1)})</td>
+                  <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(metrics.vatAmount)}</td>
+                </tr>
+                <tr className="bg-stone-900 text-white font-bold">
+                  <td className="border border-stone-900 px-3 py-1.5 font-extrabold">KDV DAHİL HEDEF SATIŞ TUTARI</td>
+                  <td className="border border-stone-900 px-3 py-1.5 text-right font-extrabold">{formatCurrency(metrics.targetSaleWithVat)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Block breakdown lists */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-stone-700 border-b border-stone-300 pb-1 mb-2">3. BLOK BAZINDA BİRİM ANALİZLERİ</div>
+            <table className="w-full border-collapse border border-stone-300 text-[9px]">
+              <thead>
+                <tr className="bg-stone-50 text-left">
+                  <th className="border border-stone-300 px-2 py-1.5 font-bold">Blok Adı</th>
+                  <th className="border border-stone-300 px-2 py-1.5 text-right font-bold">Brüt İnşaat (m²)</th>
+                  <th className="border border-stone-300 px-2 py-1.5 text-right font-bold">Net Satılabilir (m²)</th>
+                  <th className="border border-stone-300 px-2 py-1.5 text-right font-bold">Bağımsız Bölüm</th>
+                  <th className="border border-stone-300 px-2 py-1.5 text-right font-bold">Doğrudan Maliyet</th>
+                  <th className="border border-stone-300 px-2 py-1.5 text-right font-bold">Brüt m² Maliyeti</th>
+                  <th className="border border-stone-300 px-2 py-1.5 text-right font-bold">Net m² Maliyeti</th>
+                </tr>
+              </thead>
+              <tbody>
+                {blockMetrics.map(block => (
+                  <tr key={block.id}>
+                    <td className="border border-stone-300 px-2 py-1 font-bold">{block.name}</td>
+                    <td className="border border-stone-300 px-2 py-1 text-right">{formatNumber(block.grossArea, 1)} m²</td>
+                    <td className="border border-stone-300 px-2 py-1 text-right">{formatNumber(block.netSellableArea, 1)} m²</td>
+                    <td className="border border-stone-300 px-2 py-1 text-right">{block.unitCount} Adet</td>
+                    <td className="border border-stone-300 px-2 py-1 text-right font-bold">{formatCurrency(block.directCost)}</td>
+                    <td className="border border-stone-300 px-2 py-1 text-right">{formatCurrency(block.costPerGrossM2)} / m²</td>
+                    <td className="border border-stone-300 px-2 py-1 text-right">{formatCurrency(block.costPerNetM2)} / m²</td>
+                  </tr>
+                ))}
+                <tr className="bg-stone-100 font-bold text-[9.5px]">
+                  <td className="border border-stone-300 px-2 py-1 font-extrabold">PROJE TOPLAMI</td>
+                  <td className="border border-stone-300 px-2 py-1 text-right font-extrabold">{formatNumber(metrics.grossArea, 1)} m²</td>
+                  <td className="border border-stone-300 px-2 py-1 text-right font-extrabold">{formatNumber(metrics.netSellableArea, 1)} m²</td>
+                  <td className="border border-stone-300 px-2 py-1 text-right font-extrabold">{metrics.totalUnitCount} Adet</td>
+                  <td className="border border-stone-300 px-2 py-1 text-right font-extrabold">{formatCurrency(metrics.directCost)}</td>
+                  <td className="border border-stone-300 px-2 py-1 text-right font-extrabold">{formatCurrency(metrics.costPerGrossM2)} / m²</td>
+                  <td className="border border-stone-300 px-2 py-1 text-right font-extrabold">{formatCurrency(metrics.costPerNetM2)} / m²</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Category total breakdown table */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-stone-700 border-b border-stone-300 pb-1 mb-2">4. KATEGORİ BAZLI YAPIM HARCAMALARI DAĞILIMI</div>
+            <table className="w-full border-collapse border border-stone-300 text-[10px]">
+              <thead>
+                <tr className="bg-stone-50 text-left">
+                  <th className="border border-stone-300 px-3 py-1 font-bold">İnşaat İmalat Kategorisi</th>
+                  <th className="border border-stone-300 px-3 py-1 text-right font-bold w-[35%]">Toplam Harcama (TL)</th>
+                  <th className="border border-stone-300 px-3 py-1 text-right font-bold w-[20%]">Yüzde Pay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(metrics.categoryTotals)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([category, total]) => {
+                    const ratio = metrics.directCost > 0 ? total / metrics.directCost : 0
+                    return (
+                      <tr key={category}>
+                        <td className="border border-stone-300 px-3 py-1 font-semibold">{category}</td>
+                        <td className="border border-stone-300 px-3 py-1 text-right font-bold">{formatCurrency(total)}</td>
+                        <td className="border border-stone-300 px-3 py-1 text-right font-bold">%{formatNumber(ratio * 100, 1)}</td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Signatures box */}
+          <div className="pt-8 text-[11px]">
+            <div className="grid grid-cols-2 gap-20">
+              <div className="text-center border-t border-stone-400 pt-3">
+                <div className="font-bold">Raporu Düzenleyen</div>
+                <div className="text-stone-500 mt-1">İmza / Tarih</div>
+              </div>
+              <div className="text-center border-t border-stone-400 pt-3">
+                <div className="font-bold">Proje Yetkilisi / Onay</div>
+                <div className="text-stone-500 mt-1">İmza / Tarih</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   )
 }

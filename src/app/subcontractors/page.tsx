@@ -17,6 +17,8 @@ interface Subcontractor {
   barterItems?: BarterItem[]
   phone?: string
   note?: string
+  contractFileUrl?: string
+  contractFileName?: string
   createdAt: string
 }
 
@@ -495,6 +497,21 @@ export default function SubcontractorsPage() {
                         <span>Süre: {summary.item.workDurationDays} gün</span>
                         <span>Telefon: {summary.item.phone || '-'}</span>
                       </div>
+                      {summary.item.contractFileUrl && (
+                        <div className="mt-2.5">
+                          <a
+                            href={summary.item.contractFileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                            </svg>
+                            Sözleşme Belgesi ({summary.item.contractFileName || 'Gör/İndir'})
+                          </a>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">

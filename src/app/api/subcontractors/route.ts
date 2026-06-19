@@ -18,6 +18,8 @@ interface SubcontractorPayload {
   contractItems?: ContractItem[]
   paymentSchedule?: PaymentScheduleItem[]
   barterItems?: BarterItem[]
+  contractFileUrl?: string
+  contractFileName?: string
 }
 
 interface ContractItem {
@@ -52,6 +54,8 @@ interface ContractMeta {
   contractItems?: ContractItem[]
   paymentSchedule?: PaymentScheduleItem[]
   barterItems?: BarterItem[]
+  contractFileUrl?: string
+  contractFileName?: string
 }
 
 interface NoteAnalysisResult {
@@ -253,6 +257,8 @@ function normalizeAndValidatePayload(body: SubcontractorPayload) {
   const contractAmount = Number(Number(contractItemsTotal || body?.contractAmount || 0).toFixed(2))
   const phone = String(body?.phone || '').trim()
   const note = String(body?.note || '').trim()
+  const contractFileUrl = String(body?.contractFileUrl || '').trim()
+  const contractFileName = String(body?.contractFileName || '').trim()
   if (!name || !workScope || !contractDate || !workStartDate) return null
   if (!Number.isFinite(workDurationDays) || workDurationDays <= 0) return null
   if (!Number.isFinite(contractAmount) || contractAmount <= 0) return null
@@ -268,6 +274,8 @@ function normalizeAndValidatePayload(body: SubcontractorPayload) {
     contractItems,
     paymentSchedule,
     barterItems,
+    contractFileUrl,
+    contractFileName,
   }
 }
 
@@ -520,6 +528,8 @@ function mapRow(row: any) {
   const barterItems = rowBarterItems.length > 0 ? rowBarterItems : metaBarterItems
   const contractItemsTotal = contractItems.reduce((sum, item) => sum + item.amount, 0)
   const contractAmount = contractItemsTotal > 0 ? contractItemsTotal : persistedContractAmount
+  const contractFileUrl = row.contract_file_url ?? row.contractFileUrl ?? parsed.meta.contractFileUrl ?? ''
+  const contractFileName = row.contract_file_name ?? row.contractFileName ?? parsed.meta.contractFileName ?? ''
   return {
     id: row.id,
     name: row.name,
@@ -533,6 +543,8 @@ function mapRow(row: any) {
     barterItems,
     phone: row.phone || '',
     note: parsed.userNote,
+    contractFileUrl,
+    contractFileName,
     createdAt: row.created_at,
   }
 }
@@ -564,7 +576,7 @@ export async function POST(request: NextRequest) {
     if (!payload) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     await validateBarterSales(payload)
 
-    const insertPayload = {
+        const insertPayload = {
       name: payload.name,
       work_scope: payload.workScope,
       contract_date: payload.contractDate,
@@ -576,6 +588,8 @@ export async function POST(request: NextRequest) {
       barter_items: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
+      contract_file_url: payload.contractFileUrl,
+      contract_file_name: payload.contractFileName,
       created_at: new Date().toISOString(),
     }
 
@@ -591,6 +605,8 @@ export async function POST(request: NextRequest) {
       barterItems: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
+      contractFileUrl: payload.contractFileUrl,
+      contractFileName: payload.contractFileName,
       created_at: new Date().toISOString(),
     }
 
@@ -606,6 +622,8 @@ export async function POST(request: NextRequest) {
         contractItems: payload.contractItems,
         paymentSchedule: payload.paymentSchedule,
         barterItems: payload.barterItems,
+        contractFileUrl: payload.contractFileUrl,
+        contractFileName: payload.contractFileName,
       }),
       created_at: new Date().toISOString(),
     }
@@ -667,7 +685,7 @@ export async function PUT(request: NextRequest) {
       .maybeSingle()
 
 
-    const updatePayload = {
+        const updatePayload = {
       name: payload.name,
       work_scope: payload.workScope,
       contract_date: payload.contractDate,
@@ -679,6 +697,8 @@ export async function PUT(request: NextRequest) {
       barter_items: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
+      contract_file_url: payload.contractFileUrl,
+      contract_file_name: payload.contractFileName,
     }
 
     const legacyUpdatePayload = {
@@ -693,6 +713,8 @@ export async function PUT(request: NextRequest) {
       barterItems: payload.barterItems,
       phone: payload.phone,
       note: payload.note,
+      contractFileUrl: payload.contractFileUrl,
+      contractFileName: payload.contractFileName,
     }
 
     const compatibilityUpdatePayload = {
@@ -707,6 +729,8 @@ export async function PUT(request: NextRequest) {
         contractItems: payload.contractItems,
         paymentSchedule: payload.paymentSchedule,
         barterItems: payload.barterItems,
+        contractFileUrl: payload.contractFileUrl,
+        contractFileName: payload.contractFileName,
       }),
     }
 

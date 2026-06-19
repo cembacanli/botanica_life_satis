@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export interface SubcontractorFormData {
   name: string
@@ -14,6 +15,8 @@ export interface SubcontractorFormData {
   barterItems?: BarterItem[]
   phone?: string
   note?: string
+  contractFileUrl?: string
+  contractFileName?: string
 }
 
 export interface ContractItem {
@@ -61,6 +64,8 @@ const defaultData = (): SubcontractorFormData => ({
   barterItems: [],
   phone: '',
   note: '',
+  contractFileUrl: '',
+  contractFileName: '',
 })
 
 const emptyContractItem = (): ContractItem => ({
@@ -101,6 +106,8 @@ export default function SubcontractorModal({
   const [barterItems, setBarterItems] = useState<BarterItem[]>([emptyBarterItem()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [deleteCurrentFile, setDeleteCurrentFile] = useState(false)
 
   const formatAmountTr = (amount: number) =>
     new Intl.NumberFormat('tr-TR', {
@@ -240,6 +247,8 @@ export default function SubcontractorModal({
 
   useEffect(() => {
     if (!isOpen) return
+    setSelectedFile(null)
+    setDeleteCurrentFile(false)
     if (initialData) {
       setFormData({
         name: initialData.name || '',
@@ -253,6 +262,8 @@ export default function SubcontractorModal({
         barterItems: Array.isArray(initialData.barterItems) ? initialData.barterItems : [],
         phone: initialData.phone || '',
         note: initialData.note || '',
+        contractFileUrl: initialData.contractFileUrl || '',
+        contractFileName: initialData.contractFileName || '',
       })
       const initialItems = Array.isArray(initialData.contractItems) && initialData.contractItems.length > 0
         ? initialData.contractItems
@@ -285,6 +296,8 @@ export default function SubcontractorModal({
     setContractItems([emptyContractItem()])
     setPaymentSchedule([emptyPaymentScheduleItem()])
     setBarterItems([emptyBarterItem()])
+    setSelectedFile(null)
+    setDeleteCurrentFile(false)
     onClose()
   }
 
@@ -322,6 +335,35 @@ export default function SubcontractorModal({
 
     setSaving(true)
     try {
+      let finalFileUrl = formData.contractFileUrl || ''
+      let finalFileName = formData.contractFileName || ''
+
+      if (deleteCurrentFile && !selectedFile) {
+        finalFileUrl = ''
+        finalFileName = ''
+      }
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop()
+        const uniqName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`
+        const filePath = `subcontractors/${uniqName}`
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('subcontractor-documents')
+          .upload(filePath, selectedFile)
+
+        if (uploadError) {
+          throw new Error(`Dosya yüklenirken hata oluştu: ${uploadError.message}`)
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('subcontractor-documents')
+          .getPublicUrl(filePath)
+
+        finalFileUrl = urlData.publicUrl
+        finalFileName = selectedFile.name
+      }
+
       await onSave({
         name: formData.name.trim(),
         workScope: formData.workScope.trim(),
@@ -334,6 +376,8 @@ export default function SubcontractorModal({
         barterItems: finalBarterItems,
         phone: (formData.phone || '').trim(),
         note: (formData.note || '').trim(),
+        contractFileUrl: finalFileUrl,
+        contractFileName: finalFileName,
       })
       onClose()
     } catch (err) {
@@ -655,6 +699,66 @@ export default function SubcontractorModal({
                 Barter toplamı: {formatAmountTr(barterItemsTotal)} TL
               </div>
             </div>
+          </div>
+
+          {/* Sözleşme Dosyası Yükleme */}
+          <div>
+            <label className="block text-sm text-gray-700 mb-1 font-semibold">Sözleşme Belgesi (PDF veya Görsel)</label>
+            {formData.contractFileUrl && !deleteCurrentFile ? (
+              <div className="flex items-center justify-between border rounded px-3 py-2 bg-slate-50 border-slate-200">
+                <a
+                  href={formData.contractFileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-sky-700 font-medium hover:underline flex items-center gap-1.5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  {formData.contractFileName || 'Yüklenmiş Dosya'}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setDeleteCurrentFile(true)}
+                  className="text-xs font-bold text-rose-600 hover:text-rose-800"
+                >
+                  Kaldır / Değiştir
+                </button>
+              </div>
+            ) : selectedFile ? (
+              <div className="flex items-center justify-between border rounded px-3 py-2 bg-sky-50 border-sky-200">
+                <span className="text-sm text-slate-700 truncate flex items-center gap-1.5 font-medium">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  {selectedFile.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFile(null)}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-700"
+                >
+                  Vazgeç
+                </button>
+              </div>
+            ) : (
+              <div className="border border-dashed border-slate-300 rounded-lg p-4 bg-slate-50/50 hover:bg-slate-50 transition text-center cursor-pointer relative">
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={e => {
+                    if (e.target.files && e.target.files[0]) {
+                      setSelectedFile(e.target.files[0])
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="text-sm text-slate-600">
+                  <span className="font-semibold text-sky-700">Dosya seçmek için tıklayın</span> veya buraya sürükleyin
+                </div>
+                <div className="text-xs text-slate-400 mt-1">PDF, JPG, PNG (Maks. 50MB)</div>
+              </div>
+            )}
           </div>
 
           <div>

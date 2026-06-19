@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import SubcontractorClaimModal, { SubcontractorClaimFormData } from '@/components/SubcontractorClaimModal'
@@ -17,6 +17,8 @@ interface Subcontractor {
   barterItems?: BarterItem[]
   phone?: string
   note?: string
+  contractFileUrl?: string
+  contractFileName?: string
 }
 
 interface BarterItem {
@@ -52,6 +54,7 @@ interface SubcontractorClaim {
   status: 'taslak' | 'onaylandi' | 'odendi'
   note?: string
   createdAt: string
+  isSigned?: boolean
 }
 
 interface CumulativeClaim extends SubcontractorClaim {
@@ -61,6 +64,7 @@ interface CumulativeClaim extends SubcontractorClaim {
   cumulativeDeductionAmount: number
   cumulativeProgressPercent: number
   previousCumulativeClaimAmount: number
+  isSigned: boolean
 }
 
 const statusStyles: Record<SubcontractorClaim['status'], string> = {
@@ -82,6 +86,25 @@ const toNumber = (value: unknown) => {
 
 const getClaimTime = (item: SubcontractorClaim) => new Date(item.claimDate || item.createdAt || 0).getTime()
 
+const SIGNED_TAG = '[İMZALANDI]'
+
+function isClaimSigned(claim: SubcontractorClaim): boolean {
+  return (claim.note || '').includes(SIGNED_TAG)
+}
+
+function addSignedTag(note: string): string {
+  if (note.includes(SIGNED_TAG)) return note
+  return note ? `${note}\n${SIGNED_TAG}` : SIGNED_TAG
+}
+
+function removeSignedTag(note: string): string {
+  return note
+    .split('\n')
+    .filter(line => line.trim() !== SIGNED_TAG)
+    .join('\n')
+    .trim()
+}
+
 export default function SubcontractorDetailPage() {
   const params = useParams<{ id: string }>()
   const subcontractorId = String(params?.id || '')
@@ -93,6 +116,9 @@ export default function SubcontractorDetailPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClaim, setEditingClaim] = useState<SubcontractorClaim | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [signingId, setSigningId] = useState<string | null>(null)
+  const [activePrintId, setActivePrintId] = useState<string | 'all' | null>(null)
+  const printAreaRef = useRef<HTMLDivElement>(null)
 
   const barterItems = useMemo<BarterItem[]>(() => {
     return subcontractor?.barterItems || []
@@ -221,6 +247,66 @@ export default function SubcontractorDetailPage() {
     }
   }
 
+  const handleToggleSigned = useCallback(async (item: SubcontractorClaim) => {
+    if (signingId) return
+    setSigningId(item.id)
+    try {
+      const currentlySigned = isClaimSigned(item)
+      const newNote = currentlySigned
+        ? removeSignedTag(item.note || '')
+        : addSignedTag(item.note || '')
+
+      const response = await fetch('/api/subcontractor-claims', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-actor-username': user?.username || '',
+        },
+        body: JSON.stringify({
+          id: item.id,
+          subcontractorId: item.subcontractorId,
+          subcontractorName: item.subcontractorName,
+          workItem: item.workItem,
+          contractAmount: item.contractAmount,
+          progressPercent: item.progressPercent,
+          previousPaidAmount: item.previousPaidAmount,
+          currentClaimAmount: item.currentClaimAmount,
+          deductionAmount: item.deductionAmount,
+          claimDate: item.claimDate,
+          status: item.status,
+          note: newNote,
+        }),
+      })
+
+      if (response.ok) {
+        const updated = await response.json()
+        setClaims(prev => prev.map(c => (c.id === updated.id ? updated : c)))
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setSigningId(null)
+    }
+  }, [signingId, user?.username])
+
+  useEffect(() => {
+    if (activePrintId !== null) {
+      const timer = setTimeout(() => {
+        window.print()
+        setActivePrintId(null)
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [activePrintId])
+
+  const handlePrint = useCallback(() => {
+    setActivePrintId('all')
+  }, [])
+
+  const handlePrintSingle = useCallback((claimId: string) => {
+    setActivePrintId(claimId)
+  }, [])
+
   const totals = useMemo(() => {
     const totalCurrentClaim = claims.reduce((sum, item) => sum + toNumber(item.currentClaimAmount), 0)
     const totalNetPayable = claims.reduce((sum, item) => sum + toNumber(item.netPayableAmount), 0)
@@ -263,6 +349,7 @@ export default function SubcontractorDetailPage() {
           cumulativeDeductionAmount,
           cumulativeProgressPercent:
             contractAmount > 0 ? Math.min(Number(((cumulativeClaimAmount / contractAmount) * 100).toFixed(2)), 100) : 0,
+          isSigned: isClaimSigned(item),
         }
       })
   }, [claims, subcontractor?.contractAmount])
@@ -277,6 +364,11 @@ export default function SubcontractorDetailPage() {
     [cumulativeClaims]
   )
 
+  const selectedPrintClaim = useMemo(() => {
+    if (!activePrintId || activePrintId === 'all') return null
+    return cumulativeClaims.find(c => c.id === activePrintId) || null
+  }, [activePrintId, cumulativeClaims])
+
   const defaultPreviousPaidAmount = useMemo(() => {
     if (!editingClaim) return totals.totalCurrentClaim
     const found = cumulativeClaims.find(item => item.id === editingClaim.id)
@@ -288,6 +380,15 @@ export default function SubcontractorDetailPage() {
     const contractAmount = toNumber(subcontractor.contractAmount)
     return Math.max(contractAmount - totals.totalCurrentClaim - totalBarterAmount, 0)
   }, [subcontractor, totals.totalCurrentClaim, totalBarterAmount])
+
+  const formatDate = (value: string) => {
+    if (!value) return '-'
+    const parsed = new Date(`${value}T00:00:00`)
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString('tr-TR')
+    const fallback = new Date(value)
+    if (Number.isNaN(fallback.getTime())) return value
+    return fallback.toLocaleDateString('tr-TR')
+  }
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('tr-TR', {
@@ -302,7 +403,8 @@ export default function SubcontractorDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-8">
+    <>
+      <div className="min-h-screen bg-slate-100 p-4 md:p-8 screen-only">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -325,6 +427,31 @@ export default function SubcontractorDetailPage() {
             )}
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={handlePrint}
+              disabled={!subcontractor || sortedClaims.length === 0}
+              className="px-5 py-2.5 text-base bg-indigo-700 hover:bg-indigo-800 text-white rounded disabled:opacity-50 flex items-center gap-2"
+              title="Hakediş Raporu Yazdır"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Yazdır
+            </button>
+            {subcontractor?.contractFileUrl && (
+              <a
+                href={subcontractor.contractFileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-5 py-2.5 text-base bg-emerald-700 hover:bg-emerald-800 text-white rounded flex items-center gap-2"
+                title="Sözleşme Belgesini Görüntüle"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                Sözleşme Belgesi
+              </a>
+            )}
             <button
               onClick={() => router.push('/contracts')}
               className="px-5 py-2.5 text-base bg-slate-800 hover:bg-slate-900 text-white rounded"
@@ -439,14 +566,25 @@ export default function SubcontractorDetailPage() {
             <div className="p-5 text-gray-500">Kayıt yok</div>
           ) : (
             <div className="divide-y">
-              {sortedClaims.map(item => (
-                <div key={item.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              {sortedClaims.map(item => {
+                const signed = item.isSigned
+                const displayNote = (item.note || '').split('\n').filter(l => l.trim() !== SIGNED_TAG).join('\n').trim()
+                return (
+                <div key={item.id} className={`p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${signed ? 'border-l-4 border-l-green-500' : ''}`}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="text-xl font-semibold text-gray-900">{item.workItem}</div>
                       <span className={`text-sm px-3 py-1 rounded ${statusStyles[item.status]}`}>
                         {statusLabels[item.status]}
                       </span>
+                      {signed && (
+                        <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-800 font-semibold flex items-center gap-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          İmzalandı
+                        </span>
+                      )}
                     </div>
                     <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                       <div className="rounded-lg bg-slate-50 px-3 py-2">
@@ -488,9 +626,27 @@ export default function SubcontractorDetailPage() {
                         <div className="font-bold text-emerald-800">{formatCurrency(item.netPayableAmount)}</div>
                       </div>
                     </div>
-                    {item.note && <div className="text-sm text-gray-500 mt-1">{item.note}</div>}
+                    {displayNote && <div className="text-sm text-gray-500 mt-1">{displayNote}</div>}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    {/* İmzalandı Checkbox */}
+                    <label
+                      className={`flex items-center gap-2 cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium transition ${
+                        signed
+                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      } ${signingId === item.id ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={signed}
+                        onChange={() => handleToggleSigned(item)}
+                        disabled={signingId === item.id}
+                        className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500 accent-green-600"
+                      />
+                      İmzalandı
+                    </label>
+                    <div className="flex items-center gap-2">
                     {deleteConfirmId === item.id ? (
                       <div className="flex gap-2">
                         <button
@@ -509,6 +665,16 @@ export default function SubcontractorDetailPage() {
                     ) : (
                       <>
                         <button
+                          onClick={() => handlePrintSingle(item.id)}
+                          className="px-4 py-2 text-sm rounded bg-purple-100 text-purple-700 hover:bg-purple-200 flex items-center gap-1"
+                          title="Bu Hakedişi Yazdır"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Yazdır
+                        </button>
+                        <button
                           onClick={() => {
                             setEditingClaim(item)
                             setModalOpen(true)
@@ -525,9 +691,10 @@ export default function SubcontractorDetailPage() {
                         </button>
                       </>
                     )}
+                    </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>
@@ -550,6 +717,309 @@ export default function SubcontractorDetailPage() {
         submitLabel={editingClaim ? 'Güncelle' : 'Kaydet'}
       />
     </div>
+
+    {/* ======== Professional Print Area ======== */}
+    {subcontractor && sortedClaims.length > 0 && activePrintId !== null && (
+      <div
+        id="hakedis-print-area"
+        className="print-only"
+        ref={printAreaRef}
+      >
+        {activePrintId === 'all' && (
+          <div className="print-page">
+            {/* Header */}
+            <div className="print-header">
+              HAKEDİŞ RAPORU
+            </div>
+            <div className="print-subheader">
+              {subcontractor.name} — {subcontractor.workScope}
+            </div>
+
+            {/* Meta Info Table */}
+            <table className="print-meta-table">
+              <tbody>
+                <tr>
+                  <td className="meta-label">Taşeron Adı</td>
+                  <td className="meta-value">{subcontractor.name}</td>
+                  <td className="meta-label">İş Kapsamı</td>
+                  <td className="meta-value">{subcontractor.workScope}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Sözleşme Tarihi</td>
+                  <td className="meta-value">{formatDate(subcontractor.contractDate)}</td>
+                  <td className="meta-label">İşe Başlama</td>
+                  <td className="meta-value">{formatDate(subcontractor.workStartDate || subcontractor.contractDate)}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">İş Süresi</td>
+                  <td className="meta-value">{subcontractor.workDurationDays} gün</td>
+                  <td className="meta-label">Telefon</td>
+                  <td className="meta-value">{subcontractor.phone || '-'}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Sözleşme Bedeli</td>
+                  <td className="meta-value" style={{ fontWeight: 700, fontSize: '12px' }}>{formatCurrency(subcontractor.contractAmount)}</td>
+                  <td className="meta-label">Hakediş Sayısı</td>
+                  <td className="meta-value">{sortedClaims.length} adet</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Summary Box */}
+            <div className="print-summary-box">
+              <div className="print-summary-item">
+                <div className="label">Kümülatif Hakediş</div>
+                <div className="value">{formatCurrency(totals.totalCurrentClaim)}</div>
+              </div>
+              <div className="print-summary-item">
+                <div className="label">Toplam Net Ödeme</div>
+                <div className="value">{formatCurrency(totals.totalNetPayable)}</div>
+              </div>
+              <div className="print-summary-item">
+                <div className="label">Kümülatif İlerleme</div>
+                <div className="value">%{totals.cumulativeProgressPercent.toFixed(2)}</div>
+              </div>
+              <div className="print-summary-item">
+                <div className="label">Ödenen Net</div>
+                <div className="value">{formatCurrency(totals.totalPaid)}</div>
+              </div>
+              <div className="print-summary-item">
+                <div className="label">Bekleyen Ödeme</div>
+                <div className="value">{formatCurrency(totals.totalPending)}</div>
+              </div>
+              <div className="print-summary-item">
+                <div className="label">Kalan Bakiye</div>
+                <div className="value">{formatCurrency(remainingContractAmount)}</div>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 2 }}>
+                <span>İlerleme</span>
+                <span>%{totals.cumulativeProgressPercent.toFixed(2)}</span>
+              </div>
+              <div className="print-progress-bar">
+                <div className="print-progress-fill" style={{ width: `${Math.min(totals.cumulativeProgressPercent, 100)}%` }} />
+              </div>
+            </div>
+
+            {/* Claims Table */}
+            <table className="print-claims-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '4%' }}>No</th>
+                  <th style={{ width: '10%' }}>Tarih</th>
+                  <th style={{ width: '16%' }}>İş Kalemi</th>
+                  <th style={{ width: '8%' }}>Durum</th>
+                  <th style={{ width: '12%' }}>Bu Hakediş</th>
+                  <th style={{ width: '10%' }}>Kesinti</th>
+                  <th style={{ width: '12%' }}>Net Ödeme</th>
+                  <th style={{ width: '12%' }}>Küm. Hakediş</th>
+                  <th style={{ width: '8%' }}>İlerleme</th>
+                  <th style={{ width: '8%' }}>İmza</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...cumulativeClaims].sort((a, b) => a.sequenceNo - b.sequenceNo).map(item => (
+                  <tr key={item.id}>
+                    <td style={{ textAlign: 'center' }}>#{item.sequenceNo}</td>
+                    <td style={{ textAlign: 'center' }}>{formatDate(item.claimDate)}</td>
+                    <td>{item.workItem}</td>
+                    <td style={{ textAlign: 'center' }}>{statusLabels[item.status]}</td>
+                    <td>{formatCurrency(item.currentClaimAmount)}</td>
+                    <td>{formatCurrency(item.deductionAmount)}</td>
+                    <td style={{ fontWeight: 700 }}>{formatCurrency(item.netPayableAmount)}</td>
+                    <td>{formatCurrency(item.cumulativeClaimAmount)}</td>
+                    <td style={{ textAlign: 'center' }}>%{item.cumulativeProgressPercent.toFixed(1)}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {item.isSigned ? (
+                        <span className="print-signed-badge">✓ İmzalı</span>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: 9 }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'left', fontWeight: 700 }}>TOPLAM</td>
+                  <td>{formatCurrency(totals.totalCurrentClaim)}</td>
+                  <td>{formatCurrency(cumulativeClaims.length > 0 ? cumulativeClaims[cumulativeClaims.length - 1].cumulativeDeductionAmount : 0)}</td>
+                  <td style={{ fontWeight: 700 }}>{formatCurrency(totals.totalNetPayable)}</td>
+                  <td>—</td>
+                  <td style={{ textAlign: 'center' }}>%{totals.cumulativeProgressPercent.toFixed(1)}</td>
+                  <td style={{ textAlign: 'center', fontSize: 9 }}>
+                    {cumulativeClaims.filter(c => c.isSigned).length}/{cumulativeClaims.length}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Signatures */}
+            <div className="print-signatures">
+              <div className="print-signature-box">
+                <div className="name">İşveren / Yetkili</div>
+                <div className="title">Botanica Life</div>
+              </div>
+              <div className="print-signature-box">
+                <div className="name">{subcontractor.name}</div>
+                <div className="title">Taşeron / Yüklenici</div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="print-footer">
+              Bu belge Botanica Life Satış Yönetim Sistemi tarafından oluşturulmuştur. •{' '}
+              <span className="date">
+                {new Date().toLocaleDateString('tr-TR', {
+                  day: '2-digit',
+                  month: 'long',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {activePrintId !== 'all' && selectedPrintClaim && (
+          <div className="print-page">
+            {/* Header */}
+            <div className="print-header">
+              HAKEDİŞ ONAY PROTOKOLÜ
+            </div>
+            <div className="print-subheader" style={{ fontSize: '14px', fontWeight: 600 }}>
+              {subcontractor.name} — {selectedPrintClaim.sequenceNo} nolu Hakediş Belgesi
+            </div>
+
+            <div style={{ fontSize: '11px', lineHeight: '1.6', marginBottom: '20px', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+              Aşağıda detayları belirtilen iş kalemlerine ait imalatlar, yerinde incelenerek taraflarca mutabakat altına alınmış ve onaylanmıştır. Bu hakediş raporu, sözleşme şartlarına ve yapılan imalat miktarlarına uygun olarak düzenlenmiştir.
+            </div>
+
+            <h3 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', color: '#0f172a' }}>1. SÖZLEŞME VE TAŞERON BİLGİLERİ</h3>
+            <table className="print-meta-table">
+              <tbody>
+                <tr>
+                  <td className="meta-label">İşveren</td>
+                  <td className="meta-value">Botanica Life</td>
+                  <td className="meta-label">Yüklenici (Taşeron)</td>
+                  <td className="meta-value">{subcontractor.name}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">İş Kapsamı / Kalemi</td>
+                  <td className="meta-value">{subcontractor.workScope}</td>
+                  <td className="meta-label">Sözleşme Tarihi</td>
+                  <td className="meta-value">{formatDate(subcontractor.contractDate)}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Sözleşme Bedeli</td>
+                  <td className="meta-value" style={{ fontWeight: 700 }}>{formatCurrency(subcontractor.contractAmount)}</td>
+                  <td className="meta-label">İşe Başlama Tarihi</td>
+                  <td className="meta-value">{formatDate(subcontractor.workStartDate || subcontractor.contractDate)}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h3 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', color: '#0f172a', marginTop: '20px' }}>2. HAKEDİŞ HESAP TABLOSU</h3>
+            <table className="print-meta-table">
+              <tbody>
+                <tr>
+                  <td className="meta-label" style={{ width: '35%' }}>Hakediş Numarası</td>
+                  <td className="meta-value" style={{ fontWeight: 700 }}>{selectedPrintClaim.sequenceNo} Nolu Hakediş</td>
+                  <td className="meta-label" style={{ width: '35%' }}>Hakediş Tarihi</td>
+                  <td className="meta-value">{formatDate(selectedPrintClaim.claimDate)}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Yapılan İş Açıklaması</td>
+                  <td className="meta-value" colSpan={3}>{selectedPrintClaim.workItem}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Önceki Toplam Hakediş</td>
+                  <td className="meta-value">{formatCurrency(selectedPrintClaim.previousCumulativeClaimAmount)}</td>
+                  <td className="meta-label">Bu Hakediş Bedeli (Brüt)</td>
+                  <td className="meta-value" style={{ fontWeight: 700, color: '#0284c7' }}>{formatCurrency(selectedPrintClaim.currentClaimAmount)}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Bu Hakediş Kesintisi</td>
+                  <td className="meta-value" style={{ color: '#dc2626' }}>{formatCurrency(selectedPrintClaim.deductionAmount)}</td>
+                  <td className="meta-label">Bu Hakediş Net Ödemesi</td>
+                  <td className="meta-value" style={{ fontWeight: 700, fontSize: '13px', color: '#16a34a' }}>{formatCurrency(selectedPrintClaim.netPayableAmount)}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Yeni Kümülatif Hakediş Bedeli</td>
+                  <td className="meta-value" style={{ fontWeight: 600 }}>{formatCurrency(selectedPrintClaim.cumulativeClaimAmount)}</td>
+                  <td className="meta-label">Kümülatif İlerleme Oranı</td>
+                  <td className="meta-value" style={{ fontWeight: 600 }}>%{selectedPrintClaim.cumulativeProgressPercent.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td className="meta-label">Ödeme Durumu</td>
+                  <td className="meta-value">{statusLabels[selectedPrintClaim.status]}</td>
+                  <td className="meta-label">İmza Durumu</td>
+                  <td className="meta-value">
+                    {selectedPrintClaim.isSigned ? 'İMZALANDI (ONAYLI)' : 'İMZA BEKLENİYOR'}
+                  </td>
+                </tr>
+                {((selectedPrintClaim.note || '')
+                  .split('\n')
+                  .filter(l => l.trim() !== SIGNED_TAG)
+                  .join('\n')
+                  .trim()) && (
+                  <tr>
+                    <td className="meta-label">Hakediş Notu / Açıklama</td>
+                    <td className="meta-value" colSpan={3}>
+                      {(selectedPrintClaim.note || '')
+                        .split('\n')
+                        .filter(l => l.trim() !== SIGNED_TAG)
+                        .join('\n')
+                        .trim()}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            <h3 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px', color: '#0f172a', marginTop: '25px' }}>3. ONAY VE İMZA</h3>
+            <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '20px' }}>
+              Yukarıda dökümü yapılan hakediş raporu tarafların karşılıklı rızasıyla tanzim edilmiş olup, belirtilen net tutar üzerinde mutabık kalınmıştır.
+            </div>
+
+            <div className="print-signatures" style={{ marginTop: '20px' }}>
+              <div className="print-signature-box" style={{ border: '1px solid #cbd5e1', padding: '15px', borderRadius: '4px' }}>
+                <div style={{ fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', borderBottom: '1px solid #cbd5e1', paddingBottom: '6px', marginBottom: '40px', color: '#475569' }}>
+                  YÜKLENİCİ (TAŞERON)
+                </div>
+                <div className="name" style={{ fontSize: '12px', fontWeight: 600 }}>{subcontractor.name}</div>
+                <div className="title" style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Yetkili İmza / Kaşe</div>
+              </div>
+              <div className="print-signature-box" style={{ border: '1px solid #cbd5e1', padding: '15px', borderRadius: '4px' }}>
+                <div style={{ fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', borderBottom: '1px solid #cbd5e1', paddingBottom: '6px', marginBottom: '40px', color: '#475569' }}>
+                  İŞVEREN
+                </div>
+                <div className="name" style={{ fontSize: '12px', fontWeight: 600 }}>Botanica Life</div>
+                <div className="title" style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Yetkili İmza / Kaşe</div>
+              </div>
+            </div>
+
+            <div className="print-footer" style={{ marginTop: '40px' }}>
+              Bu belge Botanica Life Satış Yönetim Sistemi tarafından tanzim edilmiştir. Hakediş onay tarihi:{' '}
+              <span className="date">
+                {new Date().toLocaleDateString('tr-TR', {
+                  day: '2-digit',
+                  month: 'long',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+    </>
   )
 }
 

@@ -69,6 +69,10 @@ type BlockInput = {
   unitCount: number
   averageNetArea: number
   items: CostItem[]
+  excavationDepth?: number
+  foundationThickness?: number
+  concreteRatio?: number
+  steelRatio?: number
 }
 
 type ScenarioInputs = {
@@ -316,6 +320,10 @@ const createBlock = (index: number): BlockInput => ({
   basementCount: 1,
   unitCount: 32,
   averageNetArea: 120,
+  excavationDepth: 5,
+  foundationThickness: 1.0,
+  concreteRatio: 0.35,
+  steelRatio: 120,
   items: createDefaultItems(),
 })
 
@@ -324,6 +332,10 @@ function cloneBlock(source: BlockInput, index: number): BlockInput {
     ...source,
     id: `block-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
     name: `${source.name} Kopya`,
+    excavationDepth: source.excavationDepth || 5,
+    foundationThickness: source.foundationThickness || 1.0,
+    concreteRatio: source.concreteRatio || 0.35,
+    steelRatio: source.steelRatio || 120,
     items: source.items.map(item => ({
       ...item,
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1386,6 +1398,83 @@ export default function ConstructionCostsPage() {
     }
   }
 
+  const applyCalculatedMetrics = (blockId: string) => {
+    const block = blocks.find(b => b.id === blockId)
+    if (!block) return
+
+    const depth = block.excavationDepth ?? 5
+    const thick = block.foundationThickness ?? 1.0
+    const concreteRatio = block.concreteRatio ?? 0.35
+    const steelRatio = block.steelRatio ?? 120
+    const baseArea = block.baseArea
+    const grossArea = block.baseArea * (block.floorCount + block.basementCount)
+
+    // Formulas
+    const excavationVolume = Math.round(baseArea * depth * 1.15)
+    const grobetonVolume = Math.round(baseArea * 0.10)
+    const foundationConcrete = Math.round(baseArea * thick)
+    const floorsConcrete = Math.round(grossArea * concreteRatio)
+    const totalConcrete = foundationConcrete + floorsConcrete
+    const steelTons = Number(((totalConcrete * steelRatio) / 1000).toFixed(2))
+    const kalipArea = Math.round(totalConcrete * 2.8)
+    const waterproofingArea = Math.round(baseArea * 1.1 + 4 * Math.sqrt(baseArea) * depth)
+    const iscilikArea = Math.round(grossArea)
+
+    setBlocks(prev => {
+      return prev.map(b => {
+        if (b.id !== blockId) return b
+
+        const updatedItems = [...b.items]
+
+        const applyValue = (
+          nameSearch: string,
+          unitSearch: string,
+          calculatedQty: number,
+          defaultName: string,
+          defaultCategory: string
+        ) => {
+          const index = updatedItems.findIndex(item => {
+            const normalizedName = normalizeTurkishText(item.name).toLocaleLowerCase('tr-TR')
+            const normalizedSearch = normalizeTurkishText(nameSearch).toLocaleLowerCase('tr-TR')
+            return normalizedName.includes(normalizedSearch) && item.unit === unitSearch
+          })
+
+          if (index !== -1) {
+            updatedItems[index] = {
+              ...updatedItems[index],
+              quantity: calculatedQty,
+            }
+          } else {
+            updatedItems.push({
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name: defaultName,
+              category: defaultCategory,
+              unit: unitSearch,
+              quantity: calculatedQty,
+              unitPrice: 0,
+            })
+          }
+        }
+
+        // Apply all values
+        applyValue('Kazı metrajı', 'm³', excavationVolume, 'Kazı metrajı', 'Hafriyat - Kazı')
+        applyValue('grobeton', 'm³', grobetonVolume, 'Temel altı grobeton metrajı', 'Kaba - Beton')
+        applyValue('perde/kolon/kiriş/döşe', 'm³', totalConcrete, 'Temel/perde/kolon/kiriş/döşe beton metrajı', 'Kaba - Beton')
+        applyValue('Demir ton', 'ton', steelTons, 'Demir ton metrajı', 'Kaba - Demir')
+        applyValue('Kalıp metrajı', 'm²', kalipArea, 'Kalıp metrajı', 'Kaba - Kalıp')
+        applyValue('Su yalıtımı', 'm²', waterproofingArea, 'Su yalıtımı metrajı', 'Kaba - Yalıtım')
+        applyValue('işçilik metrajı', 'm²', iscilikArea, 'Kaba inşaat işçilik metrajı', 'Kaba - İşçilik')
+
+        return {
+          ...b,
+          items: updatedItems,
+        }
+      })
+    })
+
+    alert('Hesaplanan metrajlar tabloya aktarıldı ve güncellendi.')
+  }
+
   // Pre-calculate visual chart data
   const donutData = useMemo(() => {
     const mainTotals: Record<MainCategory, number> = {
@@ -1432,6 +1521,15 @@ export default function ConstructionCostsPage() {
   // Extract selected block items
   const selectedBlock = blocks.find(b => b.id === selectedBlockId) || blocks[0]
   const currentMetrics = blockMetrics.find(m => m.id === selectedBlock.id)
+
+  const getItemUnitPrice = (nameSearch: string, unitSearch: string) => {
+    const item = selectedBlock.items.find(item => {
+      const normalizedName = normalizeTurkishText(item.name).toLocaleLowerCase('tr-TR')
+      const normalizedSearch = normalizeTurkishText(nameSearch).toLocaleLowerCase('tr-TR')
+      return normalizedName.includes(normalizedSearch) && item.unit === unitSearch
+    })
+    return item?.unitPrice ?? 0
+  }
 
   const mainCategories = getMainCategoriesForBlock(selectedBlock)
   const activeMainCategory = getActiveMainCategory(selectedBlock)
@@ -1692,7 +1790,7 @@ export default function ConstructionCostsPage() {
                             />
                             <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
                               <span className="truncate max-w-[70%]">{field.description}</span>
-                              <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">{getFieldHelper(value, field.type)}</span>
+                              <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">{getFieldHelper(value ?? '', field.type)}</span>
                             </div>
                           </div>
                         )
@@ -1836,11 +1934,214 @@ export default function ConstructionCostsPage() {
                             />
                             <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
                               <span className="truncate max-w-[70%]">{field.description}</span>
-                              <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">{getFieldHelper(value, field.type)}</span>
+                              <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">{getFieldHelper(value ?? '', field.type)}</span>
                             </div>
                           </div>
                         )
                       })}
+                    </div>
+                  </div>
+
+                  {/* Akıllı Yapısal Metraj Hesaplayıcı */}
+                  <div className="rounded-3xl bg-white p-6 shadow-sm border border-stone-200/60 space-y-6">
+                    <div className="border-b border-stone-100 pb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div>
+                        <h3 className="text-base font-extrabold text-stone-900 tracking-tight flex items-center gap-2">
+                          <span className="text-lg">🤖</span> Akıllı Yapısal Metraj Hesaplayıcı
+                        </h3>
+                        <p className="text-xs font-medium text-stone-400 mt-0.5">
+                          Blok kaba inşaat ve hafriyat metrajlarını bilimsel yaklaşımlarla otomatik hesaplayın.
+                        </p>
+                      </div>
+                      
+                      <button
+                        onClick={() => applyCalculatedMetrics(selectedBlock.id)}
+                        className="rounded-xl bg-orange-600 hover:bg-orange-500 active:scale-95 transition-all px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-orange-950/10 shrink-0"
+                      >
+                        Metrajları Tabloya Aktar & Güncelle
+                      </button>
+                    </div>
+
+                    {/* Calculated Metrics Formula / Variables Inputs */}
+                    <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+                      {/* Gömülme Derinliği */}
+                      <div className="flex flex-col rounded-2xl border border-stone-200 bg-stone-50/50 p-4 transition-all hover:bg-stone-50 focus-within:border-stone-450 focus-within:ring-2 focus-within:ring-stone-100">
+                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Gömülme Derinliği (m)</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={selectedBlock.excavationDepth ?? 5}
+                          onChange={e => updateBlock(selectedBlock.id, 'excavationDepth', parseLocalizedNumber(e.target.value))}
+                          className="mt-2 w-full border-none bg-transparent p-0 text-sm font-bold text-stone-900 focus:outline-none focus:ring-0"
+                        />
+                        <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
+                          <span>Temel kazı derinliği.</span>
+                          <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">
+                            {selectedBlock.excavationDepth ?? 5} m
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Temel Kalınlığı */}
+                      <div className="flex flex-col rounded-2xl border border-stone-200 bg-stone-50/50 p-4 transition-all hover:bg-stone-50 focus-within:border-stone-450 focus-within:ring-2 focus-within:ring-stone-100">
+                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Temel Kalınlığı (m)</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={selectedBlock.foundationThickness ?? 1.0}
+                          onChange={e => updateBlock(selectedBlock.id, 'foundationThickness', parseLocalizedNumber(e.target.value))}
+                          className="mt-2 w-full border-none bg-transparent p-0 text-sm font-bold text-stone-900 focus:outline-none focus:ring-0"
+                        />
+                        <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
+                          <span>Radye temel kalınlığı.</span>
+                          <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">
+                            {selectedBlock.foundationThickness ?? 1.0} m
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Betonarme Oranı */}
+                      <div className="flex flex-col rounded-2xl border border-stone-200 bg-stone-50/50 p-4 transition-all hover:bg-stone-50 focus-within:border-stone-450 focus-within:ring-2 focus-within:ring-stone-100">
+                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Betonarme Oranı (m³/m²)</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={selectedBlock.concreteRatio ?? 0.35}
+                          onChange={e => updateBlock(selectedBlock.id, 'concreteRatio', parseLocalizedNumber(e.target.value))}
+                          className="mt-2 w-full border-none bg-transparent p-0 text-sm font-bold text-stone-900 focus:outline-none focus:ring-0"
+                        />
+                        <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
+                          <span>Ortalama m² beton hacmi.</span>
+                          <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">
+                            {selectedBlock.concreteRatio ?? 0.35} m³/m²
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Demir Oranı */}
+                      <div className="flex flex-col rounded-2xl border border-stone-200 bg-stone-50/50 p-4 transition-all hover:bg-stone-50 focus-within:border-stone-450 focus-within:ring-2 focus-within:ring-stone-100">
+                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">Demir Oranı (kg/m³)</span>
+                        <input
+                          type="number"
+                          step="5"
+                          value={selectedBlock.steelRatio ?? 120}
+                          onChange={e => updateBlock(selectedBlock.id, 'steelRatio', parseLocalizedNumber(e.target.value))}
+                          className="mt-2 w-full border-none bg-transparent p-0 text-sm font-bold text-stone-900 focus:outline-none focus:ring-0"
+                        />
+                        <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/50 pt-2 text-[10px] font-semibold text-stone-400">
+                          <span>Beton m³ başına demir kg.</span>
+                          <span className="text-stone-700 bg-white px-1.5 py-0.5 rounded-md border border-stone-200/80">
+                            {selectedBlock.steelRatio ?? 120} kg/m³
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calculated values summary table */}
+                    <div className="overflow-x-auto rounded-2xl border border-stone-200/80">
+                      <table className="w-full text-left text-xs font-semibold border-collapse">
+                        <thead>
+                          <tr className="bg-stone-50 border-b border-stone-200 text-stone-450 text-[10px] font-extrabold uppercase tracking-wider">
+                            <th className="px-6 py-3">Hesaplanan İmalat Grubu</th>
+                            <th className="px-4 py-3">İnşaat Mühendisliği Formülü</th>
+                            <th className="px-4 py-3 text-right">Yaklaşık Metraj</th>
+                            <th className="px-4 py-3 text-right">Birim Fiyatı (Tablodan)</th>
+                            <th className="px-4 py-3 text-right">Tahmini Tutar</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100 text-stone-700 bg-white">
+                          {(() => {
+                            const depth = selectedBlock.excavationDepth ?? 5
+                            const thick = selectedBlock.foundationThickness ?? 1.0
+                            const concreteRatio = selectedBlock.concreteRatio ?? 0.35
+                            const steelRatio = selectedBlock.steelRatio ?? 120
+                            const baseArea = selectedBlock.baseArea
+                            const grossArea = selectedBlock.baseArea * (selectedBlock.floorCount + selectedBlock.basementCount)
+
+                            // Volume calculations
+                            const excavationVolume = Math.round(baseArea * depth * 1.15)
+                            const grobetonVolume = Math.round(baseArea * 0.10)
+                            const foundationConcrete = Math.round(baseArea * thick)
+                            const floorsConcrete = Math.round(grossArea * concreteRatio)
+                            const totalConcrete = foundationConcrete + floorsConcrete
+                            const steelTons = Number(((totalConcrete * steelRatio) / 1000).toFixed(2))
+                            const kalipArea = Math.round(totalConcrete * 2.8)
+                            const waterproofingArea = Math.round(baseArea * 1.1 + 4 * Math.sqrt(baseArea) * depth)
+                            const iscilikArea = Math.round(grossArea)
+
+                            const calculatedRows = [
+                              {
+                                label: 'Hafriyat / Kazı İmalatı',
+                                formula: `Taban Alanı (${baseArea} m²) × Derinlik (${depth} m) × 1.15 Şev Payı`,
+                                qty: excavationVolume,
+                                unit: 'm³',
+                                price: getItemUnitPrice('Kazı metrajı', 'm³'),
+                              },
+                              {
+                                label: 'Temel Altı Grobeton',
+                                formula: `Taban Alanı (${baseArea} m²) × 0.10 m Kalınlık`,
+                                qty: grobetonVolume,
+                                unit: 'm³',
+                                price: getItemUnitPrice('grobeton', 'm³'),
+                              },
+                              {
+                                label: 'Taşıyıcı Betonarme (Radye Temel + Katlar)',
+                                formula: `Temel Betonu (${foundationConcrete} m³) + Katlar Betonu (${floorsConcrete} m³)`,
+                                qty: totalConcrete,
+                                unit: 'm³',
+                                price: getItemUnitPrice('perde/kolon/kiriş/döşe', 'm³'),
+                              },
+                              {
+                                label: 'Nervürlü Betonarme Demiri',
+                                formula: `Toplam Beton (${totalConcrete} m³) × Demir Yoğunluğu (${steelRatio} kg/m³) / 1000`,
+                                qty: steelTons,
+                                unit: 'ton',
+                                price: getItemUnitPrice('Demir ton', 'ton'),
+                              },
+                              {
+                                label: 'Kalıp İmalatı Metrajı',
+                                formula: `Toplam Beton (${totalConcrete} m³) × 2.8 Kalıp Çarpanı`,
+                                qty: kalipArea,
+                                unit: 'm²',
+                                price: getItemUnitPrice('Kalıp', 'm²'),
+                              },
+                              {
+                                label: 'Temel & Bodrum Su Yalıtımı (Membran)',
+                                formula: `Temel Yalıtım (${Math.round(baseArea * 1.1)} m²) + Perde Yalıtım (${Math.round(4 * Math.sqrt(baseArea) * depth)} m²)`,
+                                qty: waterproofingArea,
+                                unit: 'm²',
+                                price: getItemUnitPrice('yalıtım', 'm²'),
+                              },
+                              {
+                                label: 'Kaba İnşaat Yapım İşçiliği',
+                                formula: `Toplam Brüt İnşaat Alanı (Brüt: ${grossArea} m²)`,
+                                qty: iscilikArea,
+                                unit: 'm²',
+                                price: getItemUnitPrice('işçilik', 'm²'),
+                              },
+                            ]
+
+                            return calculatedRows.map((row, i) => {
+                              const total = row.qty * row.price
+                              return (
+                                <tr key={i} className="hover:bg-stone-50/50 transition-colors">
+                                  <td className="px-6 py-3.5 font-bold text-stone-900">{row.label}</td>
+                                  <td className="px-4 py-3.5 text-stone-500 font-normal">{row.formula}</td>
+                                  <td className="px-4 py-3.5 text-right font-extrabold text-stone-850">
+                                    {formatNumber(row.qty, row.unit === 'ton' ? 2 : 0)} {row.unit}
+                                  </td>
+                                  <td className="px-4 py-3.5 text-right font-bold text-stone-600">
+                                    {row.price > 0 ? formatCurrency(row.price) : 'Fiyat girilmemiş'}
+                                  </td>
+                                  <td className="px-4 py-3.5 text-right font-extrabold text-orange-600">
+                                    {formatCurrency(total)}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          })()}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 

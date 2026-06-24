@@ -363,7 +363,7 @@ export default function Dashboard() {
             <h2 className="text-lg md:text-2xl font-bold text-white mb-4 text-center">🗺️ Site Planı (Bloklara tıkla)</h2>
             <div className="relative rounded-lg overflow-hidden shadow-2xl group bg-white/95">
               <img
-                src="/site-plan.jpg"
+                src="/site-plan.png"
                 alt="Site Planı"
                 className="w-full h-full object-contain"
               />

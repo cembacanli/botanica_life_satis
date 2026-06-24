@@ -89,7 +89,7 @@ export async function getApartmentStats() {
     totalApartments: count || 0,
     blocks: {
       'A-B': '60 daire (2+1, 90m²)',
-      'C-D': '120 daire (1+1, 45m²)',
+      'C-D': '119 daire (1+1, 45m²)',
     },
   }
 }

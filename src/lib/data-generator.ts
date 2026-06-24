@@ -94,30 +94,16 @@ export function generateApartments(): ApartmentData[] {
     let apartmentNumber = 0
     for (let floor = 1; floor <= 10; floor++) {
       const floorPrice = cdBlockPrices[floor]
+      const floorUnits = floor === 1 ? 11 : 12
       
-      // Ana yol cephesi (6 daire)
-      for (let i = 1; i <= 6; i++) {
+      for (let i = 1; i <= floorUnits; i++) {
         apartmentNumber++
+        const facade = i <= 6 ? 'ana_yol' : 'arka_cephe'
         apartments.push({
           block,
           floor,
           number: apartmentNumber,
-          facade: 'ana_yol',
-          area: 45,
-          type: '1+1',
-          price: floorPrice,
-          status: 'available',
-        })
-      }
-
-      // Arka cephe (6 daire)
-      for (let i = 7; i <= 12; i++) {
-        apartmentNumber++
-        apartments.push({
-          block,
-          floor,
-          number: apartmentNumber,
-          facade: 'arka_cephe',
+          facade,
           area: 45,
           type: '1+1',
           price: floorPrice,

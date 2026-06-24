@@ -36,7 +36,7 @@ const blocks: Record<string, BlockInfo> = {
   },
   C: {
     name: 'C Blok',
-    totalApartments: 120,
+    totalApartments: 119,
     type: '1+1 Daire',
     area: '45 m²',
     priceRange: '2.50M - 2.80M TL',
@@ -45,7 +45,7 @@ const blocks: Record<string, BlockInfo> = {
   },
   D: {
     name: 'D Blok',
-    totalApartments: 120,
+    totalApartments: 119,
     type: '1+1 Daire',
     area: '45 m²',
     priceRange: '2.50M - 2.80M TL',
@@ -214,7 +214,7 @@ export default function Dashboard() {
               BOTANICA LIFE - DAİRE SATIŞ PROGRAMI
             </h1>
             <p className="text-xl text-gray-300">
-              Toplam 360 Daire - 4 Blok - 10 Kat
+              Toplam 358 Daire - 4 Blok - 10 Kat
             </p>
           </div>
           <button
@@ -417,7 +417,7 @@ export default function Dashboard() {
         {/* İstatistikler */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8 md:mb-12">
           <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 md:p-6 border border-white/20">
-            <div className="text-2xl font-bold text-blue-400 mb-2 md:text-3xl">360</div>
+            <div className="text-2xl font-bold text-blue-400 mb-2 md:text-3xl">358</div>
             <div className="text-gray-300">Toplam Daire</div>
           </div>
           <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 md:p-6 border border-white/20">

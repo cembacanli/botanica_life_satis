@@ -628,8 +628,8 @@ export default function BlockPage() {
   const blockInfo = {
     A: { color: 'from-blue-600 to-blue-400', totalUnits: 60 },
     B: { color: 'from-cyan-600 to-cyan-400', totalUnits: 60 },
-    C: { color: 'from-green-600 to-green-400', totalUnits: 120 },
-    D: { color: 'from-fuchsia-600 to-fuchsia-400', totalUnits: 120 },
+    C: { color: 'from-green-600 to-green-400', totalUnits: 119 },
+    D: { color: 'from-fuchsia-600 to-fuchsia-400', totalUnits: 119 },
   }
 
   if (loading) {

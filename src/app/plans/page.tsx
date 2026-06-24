@@ -7,7 +7,7 @@ const plans = [
     id: 'ab',
     title: 'A / B Blok - 2+1 (90 m2)',
     description: 'Realistik 3D hissiyatli plan, satis sunumu icin optimize edildi.',
-    src: '/plans/ab-2plus1-90m2.svg',
+    src: '/plans/ab-2plus1-90m2.png',
     imageClass: 'w-4/5',
   },
   {
@@ -63,7 +63,7 @@ export default function PlansPage() {
                     download
                     className="px-4 py-2 text-sm rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
                   >
-                    SVG Indir
+                    Gorseli Indir
                   </a>
                 </div>
               </div>

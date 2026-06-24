@@ -208,142 +208,145 @@ export default function Dashboard() {
       <div className="absolute inset-0 bg-black/60 pointer-events-none"></div>
       <div className="w-full mx-auto px-0 md:max-w-7xl relative z-10">
         {/* Header */}
-        <div className="mb-8 flex flex-wrap items-center justify-center gap-3 text-center lg:mb-12 lg:justify-between">
-          <div className="w-full lg:flex-1">
-            <h1 className="text-2xl font-bold text-white mb-3">
-              BOTANICA LIFE - DAİRE SATIŞ PROGRAMI
-            </h1>
-            <p className="text-xl text-gray-300">
-              Toplam 358 Daire - 4 Blok - 10 Kat
-            </p>
+        <div className="mb-8 rounded-[28px] border border-white/15 bg-white/8 p-4 shadow-2xl backdrop-blur-xl md:p-5 lg:mb-12 lg:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                Botanica Life Kontrol Paneli
+              </div>
+              <h1 className="max-w-4xl text-2xl font-black leading-tight text-white md:text-4xl">
+                CEM BACANLI - BOTANICA LIFE - DAIRE SATIS PROGRAMI
+              </h1>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 text-left">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Toplam Daire</div>
+                  <div className="mt-1 text-xl font-bold text-white">358</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 text-left">
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Blok / Kat</div>
+                  <div className="mt-1 text-xl font-bold text-white">4 / 10</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 xl:max-w-sm xl:justify-end">
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-orange-400/30 bg-orange-500/90 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-orange-500"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                  Admin Paneli
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/90 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-red-500"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Guvenli Cikis
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => router.push('/installments')}
-            className="px-4 py-3 md:px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            Taksitleri Yönet
-          </button>
-          <button
-            onClick={() => router.push('/reports')}
-            className="px-4 py-3 md:px-6 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
-            Raporlar
-          </button>
-          <button
-            onClick={() => router.push('/costs')}
-            className="px-4 py-3 md:px-6 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-3.866 0-7 1.343-7 3v4c0 1.657 3.134 3 7 3s7-1.343 7-3v-4c0-1.657-3.134-3-7-3zm0 0V5m0 3v3" />
-            </svg>
-            Maliyet
-          </button>
-          {user?.role === 'admin' && (
+
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
             <button
-              onClick={() => router.push('/construction-costs')}
-              className="px-4 py-3 md:px-6 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              onClick={() => router.push('/installments')}
+              className="group rounded-2xl border border-indigo-400/20 bg-gradient-to-br from-indigo-500/85 to-indigo-700/85 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-indigo-300/40"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6M10 9h4"
-                />
-              </svg>
-              Insaat Hesabi
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">Taksitler</div>
+              <div className="mt-1 text-xs text-indigo-100">Tahsilat ve odeme planlari</div>
             </button>
-          )}
-          {user?.role === 'admin' && (
+
             <button
-              onClick={() => router.push('/material-procurement')}
-              className="px-4 py-3 md:px-6 bg-stone-700 hover:bg-stone-800 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              onClick={() => router.push('/reports')}
+              className="group rounded-2xl border border-fuchsia-400/20 bg-gradient-to-br from-fuchsia-500/85 to-purple-700/85 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-fuchsia-300/40"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                />
-              </svg>
-              Malzeme Alım Modülü
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">Raporlar</div>
+              <div className="mt-1 text-xs text-fuchsia-100">Satis ve musteri ozetleri</div>
             </button>
-          )}
-          <button
-            onClick={() => router.push('/contracts')}
-            className="px-4 py-3 md:px-6 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 7h18M3 12h18M3 17h18M8 7v10m8-10v10"
-              />
-            </svg>
-            Sözleşmeler
-          </button>
-          <button
-            onClick={() => router.push('/plans')}
-            className="px-4 py-3 md:px-6 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2m0 18l6-3m-6 3V2m6 15l6-3m-6 3V5m6 9V3.618a1 1 0 00-.553-.894L15 0"
-              />
-            </svg>
-            Planlar
-          </button>
-          <div className="flex flex-wrap justify-center gap-3">
+
+            <button
+              onClick={() => router.push('/costs')}
+              className="group rounded-2xl border border-slate-300/20 bg-gradient-to-br from-slate-600/90 to-slate-800/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-slate-200/40"
+            >
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-3.866 0-7 1.343-7 3v4c0 1.657 3.134 3 7 3s7-1.343 7-3v-4c0-1.657-3.134-3-7-3zm0 0V5m0 3v3" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">Maliyet</div>
+              <div className="mt-1 text-xs text-slate-200">Yillik ve aylik gider takibi</div>
+            </button>
+
             {user?.role === 'admin' && (
               <button
-                onClick={() => router.push('/admin')}
-                className="px-4 py-3 md:px-6 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                onClick={() => router.push('/construction-costs')}
+                className="group rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-500/90 to-orange-600/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-amber-200/40"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-                  />
-                </svg>
-                Admin
+                <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6M10 9h4" />
+                  </svg>
+                </div>
+                <div className="text-[15px] font-bold">Insaat Hesabi</div>
+                <div className="mt-1 text-xs text-amber-100">Metraj ve senaryo yonetimi</div>
               </button>
             )}
+
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => router.push('/material-procurement')}
+                className="group rounded-2xl border border-stone-300/20 bg-gradient-to-br from-stone-700/90 to-stone-900/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-stone-200/40"
+              >
+                <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+                <div className="text-[15px] font-bold">Malzeme Alimi</div>
+                <div className="mt-1 text-xs text-stone-200">Satin alma ve stok akislari</div>
+              </button>
+            )}
+
             <button
-              onClick={handleLogout}
-              className="px-4 py-3 md:px-6 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              onClick={() => router.push('/contracts')}
+              className="group rounded-2xl border border-emerald-300/20 bg-gradient-to-br from-emerald-500/90 to-teal-700/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-emerald-200/40"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                />
-              </svg>
-              Çıkış
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18M8 7v10m8-10v10" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">Sozlesmeler</div>
+              <div className="mt-1 text-xs text-emerald-100">Taseron ve hakedis yonetimi</div>
+            </button>
+
+            <button
+              onClick={() => router.push('/plans')}
+              className="group rounded-2xl border border-sky-300/20 bg-gradient-to-br from-sky-500/90 to-blue-700/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-sky-200/40"
+            >
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2m0 18l6-3m-6 3V2m6 15l6-3m-6 3V5m6 9V3.618a1 1 0 00-.553-.894L15 0" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">Planlar</div>
+              <div className="mt-1 text-xs text-sky-100">Vaziyet ve proje dokumanlari</div>
             </button>
           </div>
         </div>

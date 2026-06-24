@@ -26,14 +26,25 @@ const FALLBACK_PALETTE = [
 const _colorCache: Record<string, string> = {}
 let _colorIdx = 0
 
+const normalizeForMatch = (value: string) =>
+  value
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
 const getCategoryMeta = (val: string) => {
   // Tam eşleşme
   const exact = COST_CATEGORIES.find(c => c.value === val)
   if (exact) return exact
   // Türkçe normalize eşleşme (büyük/küçük harf, aksan)
-  const norm = (s: string) => s.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  const normVal = norm(val)
-  const fuzzy = COST_CATEGORIES.find(c => norm(c.label).includes(normVal) || normVal.includes(norm(c.label)))
+  const normVal = normalizeForMatch(val)
+  const fuzzy = COST_CATEGORIES.find(c => normalizeForMatch(c.label).includes(normVal) || normVal.includes(normalizeForMatch(c.label)))
   if (fuzzy) return { label: val, color: fuzzy.color }
   // Bilinmeyen → kalıcı renk ata
   if (!_colorCache[val]) { _colorCache[val] = FALLBACK_PALETTE[_colorIdx++ % FALLBACK_PALETTE.length] }
@@ -46,6 +57,68 @@ const fmtShort = (n: number) => {
   if (n >= 1_000_000) return `₺${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `₺${(n / 1_000).toFixed(0)}K`
   return fmt.format(n)
+}
+
+type CostPeriodMeta = {
+  year: string
+  monthKey: string
+  label: string
+  sortKey: string
+}
+
+const getCostPeriodMeta = (cost: any): CostPeriodMeta => {
+  const itemName = String(cost?.itemName || '')
+  const normalizedName = normalizeForMatch(itemName)
+
+  const explicitYear = normalizedName.match(/\b(20\d{2})\b/)?.[1]
+  const explicitMonthRaw = normalizedName.match(/\b(\d{1,2})\s*\.?\s*ay\b/)?.[1]
+  const explicitMonth = explicitMonthRaw ? Number(explicitMonthRaw) : null
+  const rawLowerName = itemName.toLowerCase()
+  const looksLikeYearBucket =
+    normalizedName.includes('yil') ||
+    normalizedName.includes('gider') ||
+    rawLowerName.includes('yÄ±l') ||
+    rawLowerName.includes('gider')
+
+  if (explicitYear && explicitMonth && explicitMonth >= 1 && explicitMonth <= 12) {
+    const monthValue = String(explicitMonth).padStart(2, '0')
+    const monthKey = `${explicitYear}-${monthValue}`
+    return {
+      year: explicitYear,
+      monthKey,
+      label: new Date(`${monthKey}-01`).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }),
+      sortKey: monthKey,
+    }
+  }
+
+  if (explicitYear && !explicitMonth && looksLikeYearBucket) {
+    return {
+      year: explicitYear,
+      monthKey: `${explicitYear}-genel`,
+      label: `${explicitYear} Genel`,
+      sortKey: `${explicitYear}-00`,
+    }
+  }
+
+  const date = String(cost?.date || '')
+  const dateYear = date.slice(0, 4)
+  const dateMonth = date.slice(0, 7)
+
+  if (dateYear && dateMonth.length === 7) {
+    return {
+      year: dateYear,
+      monthKey: dateMonth,
+      label: new Date(`${dateMonth}-01`).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }),
+      sortKey: dateMonth,
+    }
+  }
+
+  return {
+    year: 'Bilinmiyor',
+    monthKey: 'bilinmiyor',
+    label: 'Dönemi Belirsiz',
+    sortKey: '0000-00',
+  }
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────────────────
@@ -297,9 +370,38 @@ export default function CostsPage() {
 
   // ── Mevcut yıllar (veriden otomatik)
   const availableYears = useMemo(() => {
-    const yrs = [...new Set(costs.map(c => (c.date || '').slice(0, 4)).filter(Boolean))]
-    return yrs.sort().reverse()
+    const yrs = [...new Set(costs.map(c => getCostPeriodMeta(c).year).filter(Boolean))]
+    return yrs.sort()
   }, [costs])
+
+  const availableMonthsForSelectedYear = useMemo(() => {
+    return [...new Set(
+      costs
+        .filter(c => {
+          const period = getCostPeriodMeta(c)
+          const yearMatch = selectedYear ? period.year === selectedYear : true
+          const categoryMatch = filterCat ? c.category === filterCat : true
+          return yearMatch && categoryMatch
+        })
+        .map(c => {
+          const period = getCostPeriodMeta(c)
+          return `${period.monthKey}::${period.label}::${period.sortKey}`
+        })
+        .filter(Boolean)
+    )]
+      .sort((a, b) => {
+        const [, , aSort] = a.split('::')
+        const [, , bSort] = b.split('::')
+        return aSort.localeCompare(bSort)
+      })
+      .map(month => {
+        const [value, label] = month.split('::')
+        return {
+          value,
+          label: label.replace(/\s+\d{4}$/, ''),
+        }
+      })
+  }, [costs, selectedYear, filterCat])
 
   // Varsayılan yılı ayarla (ilk veri gelince)
   useEffect(() => {
@@ -309,35 +411,53 @@ export default function CostsPage() {
   // ── Filtreli liste (ay + kategori + yıl)
   const filteredCosts = useMemo(() => {
     return costs.filter(c => {
-      const monthMatch = filterMonth ? (c.date || '').startsWith(filterMonth) : true
+      const period = getCostPeriodMeta(c)
+      const monthMatch = filterMonth ? period.monthKey === filterMonth : true
       const catMatch = filterCat ? c.category === filterCat : true
-      const yearMatch = selectedYear ? (c.date || '').startsWith(selectedYear) : true
+      const yearMatch = selectedYear ? period.year === selectedYear : true
       return monthMatch && catMatch && yearMatch
     })
   }, [costs, filterMonth, filterCat, selectedYear])
 
+  useEffect(() => {
+    if (!selectedYear) return
+    if (!filterMonth) return
+    const existsInSelectedYear = availableMonthsForSelectedYear.some(month => month.value === filterMonth)
+    if (!existsInSelectedYear) {
+      setFilterMonth('')
+    }
+  }, [selectedYear, filterMonth, availableMonthsForSelectedYear])
+
   // ── Aylık gruplar
   const monthGroups = useMemo(() => {
-    const groups: Record<string, any[]> = {}
+    const groups: Record<string, { items: any[]; label: string; sortKey: string }> = {}
     filteredCosts.forEach(c => {
-      const key = (c.date || '').slice(0, 7) // YYYY-MM
-      if (!groups[key]) groups[key] = []
-      groups[key].push(c)
+      const period = getCostPeriodMeta(c)
+      if (!groups[period.monthKey]) {
+        groups[period.monthKey] = {
+          items: [],
+          label: period.label,
+          sortKey: period.sortKey,
+        }
+      }
+      groups[period.monthKey].items.push(c)
     })
     return Object.entries(groups)
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([month, items]) => ({
+      .sort(([, a], [, b]) => b.sortKey.localeCompare(a.sortKey))
+      .map(([month, group]) => ({
         month,
-        label: new Date(month + '-01').toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }),
-        items: items.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
-        total: items.reduce((s, i) => s + (i.amount || 0), 0),
+        label: group.label,
+        items: group.items.sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+        total: group.items.reduce((s, i) => s + (i.amount || 0), 0),
       }))
   }, [filteredCosts])
 
   // ── Grafikler için veri
   const monthChartData = useMemo(() => {
     return monthGroups.slice(0, 12).reverse().map(g => ({
-      label: new Date(g.month + '-01').toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' }),
+      label: g.month.endsWith('-genel')
+        ? `${g.month.slice(2, 4)} Gn`
+        : new Date(g.month + '-01').toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' }),
       amount: g.total,
     }))
   }, [monthGroups])
@@ -517,34 +637,70 @@ export default function CostsPage() {
         ) : (
           <div className="space-y-4">
 
-            {/* Yıl Sekmeleri */}
+            {/* Yıl Alt Sekmeleri */}
             {availableYears.length > 1 && (
-              <div className="flex gap-2 flex-wrap">
-                {availableYears.map(yr => {
-                  const yrTotal = costs
-                    .filter(c => (c.date || '').startsWith(yr))
-                    .reduce((s, c) => s + (c.amount || 0), 0)
-                  const isActive = selectedYear === yr
-                  return (
-                    <button
-                      key={yr}
-                      onClick={() => { setSelectedYear(yr); setFilterMonth('') }}
-                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm border ${
-                        isActive
-                          ? 'bg-slate-800 text-white border-slate-800 shadow-md'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-slate-400 hover:text-slate-700'
-                      }`}
-                    >
-                      <span className={`text-base ${isActive ? '' : 'opacity-60'}`}>📅</span>
-                      <span>{yr}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        {fmtShort(yrTotal)}
-                      </span>
-                    </button>
-                  )
-                })}
+              <div className="space-y-3">
+                <div className="overflow-x-auto">
+                  <div className="inline-flex items-center gap-2 border-b border-slate-200 pb-2">
+                    {availableYears.map(yr => {
+                      const yrTotal = costs
+                        .filter(c => getCostPeriodMeta(c).year === yr)
+                        .reduce((s, c) => s + (c.amount || 0), 0)
+                      const isActive = selectedYear === yr
+                      return (
+                        <button
+                          key={yr}
+                          onClick={() => { setSelectedYear(yr); setFilterMonth('') }}
+                          className={`flex min-w-[148px] items-center justify-between rounded-t-xl border border-b-0 px-4 py-3 text-left transition-all ${
+                            isActive
+                              ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-800'
+                          }`}
+                        >
+                          <span className="text-sm font-bold">{yr}</span>
+                          <span className={`ml-3 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            isActive ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {fmtShort(yrTotal)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {availableMonthsForSelectedYear.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                      <button
+                        onClick={() => setFilterMonth('')}
+                        className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                          filterMonth === ''
+                            ? 'bg-white text-slate-900 shadow-sm border border-slate-300'
+                            : 'text-slate-600 hover:bg-white'
+                        }`}
+                      >
+                        Tümü
+                      </button>
+                      {availableMonthsForSelectedYear.map(month => {
+                        const isActive = filterMonth === month.value
+                        return (
+                          <button
+                            key={month.value}
+                            onClick={() => setFilterMonth(month.value)}
+                            className={`rounded-xl px-4 py-2 text-sm font-medium capitalize transition-all ${
+                              isActive
+                                ? 'bg-slate-900 text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-white'
+                            }`}
+                          >
+                            {month.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -610,8 +766,8 @@ export default function CostsPage() {
                 </div>
               )
             })}
-            </div> {/* /space-y-3 inner */}
-          </div> {/* /space-y-4 outer */}
+            </div>
+          </div>
         )}
       </div>
 

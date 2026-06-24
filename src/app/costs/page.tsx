@@ -331,16 +331,156 @@ function DonutChart({ data }: { data: { label: string; value: number; color: str
 }
 
 // ─── Export Utils ───────────────────────────────────────────────────────────────
-function exportCSV(costs: any[]) {
-  const header = 'Tarih,Kategori,Kalem Adı,Tutar (TL),Not'
-  const rows = costs.map(c =>
-    [c.date, getCategoryMeta(c.category).label, `"${c.itemName}"`, c.amount, `"${c.note || ''}"`].join(',')
-  )
-  const csv = [header, ...rows].join('\n')
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+const escapeExcelXml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+
+function exportExcel(costs: any[]) {
+  const sortedCosts = [...costs].sort((a, b) => {
+    const periodCompare = getCostPeriodMeta(a).sortKey.localeCompare(getCostPeriodMeta(b).sortKey)
+    if (periodCompare !== 0) return periodCompare
+    return String(a.date || '').localeCompare(String(b.date || ''))
+  })
+
+  const totalAmount = sortedCosts.reduce((sum, cost) => sum + (Number(cost.amount) || 0), 0)
+
+  const yearlyTotals = sortedCosts.reduce<Record<string, number>>((acc, cost) => {
+    const year = getCostPeriodMeta(cost).year
+    acc[year] = (acc[year] || 0) + (Number(cost.amount) || 0)
+    return acc
+  }, {})
+
+  const monthlyTotals = sortedCosts.reduce<Record<string, { year: string; label: string; sortKey: string; total: number }>>((acc, cost) => {
+    const period = getCostPeriodMeta(cost)
+    if (!acc[period.monthKey]) {
+      acc[period.monthKey] = { year: period.year, label: period.label, sortKey: period.sortKey, total: 0 }
+    }
+    acc[period.monthKey].total += Number(cost.amount) || 0
+    return acc
+  }, {})
+
+  const detailRows = sortedCosts.map(cost => {
+    const period = getCostPeriodMeta(cost)
+    const category = getCategoryMeta(cost.category).label
+    return `
+      <Row>
+        <Cell><Data ss:Type="String">${escapeExcelXml(period.year)}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeExcelXml(period.label)}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeExcelXml(String(cost.date || ''))}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeExcelXml(category)}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeExcelXml(String(cost.itemName || ''))}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeExcelXml(String(cost.note || ''))}</Data></Cell>
+        <Cell ss:StyleID="currency"><Data ss:Type="Number">${Number(cost.amount) || 0}</Data></Cell>
+      </Row>`
+  }).join('')
+
+  const yearRows = Object.entries(yearlyTotals)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([year, total]) => `
+      <Row>
+        <Cell><Data ss:Type="String">${escapeExcelXml(year)}</Data></Cell>
+        <Cell ss:StyleID="currency"><Data ss:Type="Number">${total}</Data></Cell>
+      </Row>`)
+    .join('')
+
+  const monthRows = Object.values(monthlyTotals)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    .map(item => `
+      <Row>
+        <Cell><Data ss:Type="String">${escapeExcelXml(item.year)}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeExcelXml(item.label)}</Data></Cell>
+        <Cell ss:StyleID="currency"><Data ss:Type="Number">${item.total}</Data></Cell>
+      </Row>`)
+    .join('')
+
+  const workbook = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#1E293B" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="currency">
+   <NumberFormat ss:Format="[$₺-41F] #,##0.00"/>
+  </Style>
+  <Style ss:ID="total">
+   <Font ss:Bold="1"/>
+   <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="[$₺-41F] #,##0.00"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Maliyet Detayı">
+  <Table>
+   <Column ss:Width="80"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="240"/>
+   <Column ss:Width="280"/>
+   <Column ss:Width="120"/>
+   <Row>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Yıl</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Dönem</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Tarih</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Kategori</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Kalem Adı</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Açıklama</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Tutar</Data></Cell>
+   </Row>
+   ${detailRows}
+   <Row>
+    <Cell><Data ss:Type="String">Genel Toplam</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell ss:StyleID="total" ss:Formula="=SUM(R2C7:R${sortedCosts.length + 1}C7)"><Data ss:Type="Number">${totalAmount}</Data></Cell>
+   </Row>
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="Yıllık Özet">
+  <Table>
+   <Column ss:Width="80"/>
+   <Column ss:Width="140"/>
+   <Row>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Yıl</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Toplam Tutar</Data></Cell>
+   </Row>
+   ${yearRows}
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="Aylık Özet">
+  <Table>
+   <Column ss:Width="80"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="140"/>
+   <Row>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Yıl</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Ay</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Toplam Tutar</Data></Cell>
+   </Row>
+   ${monthRows}
+  </Table>
+ </Worksheet>
+</Workbook>`
+
+  const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = `maliyetler_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click(); URL.revokeObjectURL(url)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `maliyet-raporu_${new Date().toISOString().slice(0, 10)}.xml`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ─── ANA SAYFA ─────────────────────────────────────────────────────────────────
@@ -532,7 +672,7 @@ export default function CostsPage() {
             <p className="text-white/60 text-sm mt-0.5">Proje harcamalarını aylık takip edin</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => exportCSV(filteredCosts)}
+            <button onClick={() => exportExcel(filteredCosts)}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
               📤 Excel İndir
             </button>
@@ -651,17 +791,17 @@ export default function CostsPage() {
                         <button
                           key={yr}
                           onClick={() => { setSelectedYear(yr); setFilterMonth('') }}
-                          className={`flex min-w-[148px] items-center justify-between rounded-t-xl border border-b-0 px-4 py-3 text-left transition-all ${
+                          className={`flex min-w-[220px] items-center justify-between rounded-t-xl border border-b-0 px-4 py-3 text-left transition-all ${
                             isActive
                               ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
                               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-800'
                           }`}
                         >
                           <span className="text-sm font-bold">{yr}</span>
-                          <span className={`ml-3 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          <span className={`ml-3 rounded-full px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap ${
                             isActive ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'
                           }`}>
-                            {fmtShort(yrTotal)}
+                            {fmtFull.format(yrTotal)}
                           </span>
                         </button>
                       )

@@ -192,6 +192,10 @@ export default function WallMaterialCalculator({ username = '' }: { username?: s
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'loading'>('idle')
   const [serverMessage, setServerMessage] = useState('')
 
+  const filteredProjects = useMemo(() => {
+    return savedProjects.filter(p => !(p.project as any)?.isInsulation)
+  }, [savedProjects])
+
   useEffect(() => {
     const loadProjects = async () => {
       setSaveState('loading')
@@ -780,14 +784,14 @@ export default function WallMaterialCalculator({ username = '' }: { username?: s
                 </tr>
               </thead>
               <tbody>
-                {savedProjects.length === 0 && (
+                {filteredProjects.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-4 py-6 text-center text-stone-500">
                       Supabase üzerinde henüz kayıtlı proje yok.
                     </td>
                   </tr>
                 )}
-                {savedProjects.map(item => (
+                {filteredProjects.map(item => (
                   <tr key={item.id} className={`border-b border-stone-100 ${activeProjectId === item.id ? 'bg-emerald-50' : 'bg-white'}`}>
                     <td className="px-4 py-3 font-medium text-stone-900">{item.projectName}</td>
                     <td className="px-4 py-3 text-stone-600">{item.username || '-'}</td>

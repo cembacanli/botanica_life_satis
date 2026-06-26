@@ -50,6 +50,12 @@ interface SubcontractorClaim {
   status: 'taslak' | 'onaylandi' | 'odendi'
 }
 
+interface SubcontractorPayment {
+  id: string
+  subcontractorId: string
+  amount: number
+}
+
 type StatusFilter = 'all' | 'active' | 'delayed' | 'completed' | 'noClaims'
 
 interface SubcontractorSummary {
@@ -58,6 +64,7 @@ interface SubcontractorSummary {
   totalClaimAmount: number
   totalNet: number
   totalPaid: number
+  totalStandalonePayments: number
   pendingNet: number
   remainingPayableAmount: number
   completionPercent: number
@@ -210,6 +217,7 @@ export default function SubcontractorsPage() {
   const [mounted, setMounted] = useState(false)
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([])
   const [claims, setClaims] = useState<SubcontractorClaim[]>([])
+  const [payments, setPayments] = useState<SubcontractorPayment[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editingSubcontractor, setEditingSubcontractor] = useState<Subcontractor | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -225,6 +233,11 @@ export default function SubcontractorsPage() {
       .then(r => r.json())
       .then(data => setClaims(Array.isArray(data) ? data : []))
       .catch(() => setClaims([]))
+
+    fetch('/api/subcontractor-payments', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => setPayments(Array.isArray(data) ? data : []))
+      .catch(() => setPayments([]))
   }
 
   useEffect(() => {
@@ -282,16 +295,19 @@ export default function SubcontractorsPage() {
     }
     setSubcontractors(prev => prev.filter(subcontractor => subcontractor.id !== item.id))
     setClaims(prev => prev.filter(claim => claim.subcontractorId !== item.id))
+    setPayments(prev => prev.filter(payment => payment.subcontractorId !== item.id))
   }
 
   const summaries = useMemo<SubcontractorSummary[]>(() => {
     return subcontractors.map(item => {
       const relatedClaims = claims.filter(claim => claim.subcontractorId === item.id)
+      const relatedPayments = payments.filter(payment => payment.subcontractorId === item.id)
       const totalClaimAmount = relatedClaims.reduce((sum, claim) => sum + Number(claim.currentClaimAmount || 0), 0)
       const totalNet = relatedClaims.reduce((sum, claim) => sum + Number(claim.netPayableAmount || 0), 0)
       const totalPaid = relatedClaims
         .filter(claim => claim.status === 'odendi')
         .reduce((sum, claim) => sum + Number(claim.netPayableAmount || 0), 0)
+      const totalStandalonePayments = relatedPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
       const pendingNet = Math.max(totalNet - totalPaid, 0)
       const analysisText = extractAnalysisText(item.note || '')
       const noteDeduction = Math.max(
@@ -304,7 +320,7 @@ export default function SubcontractorsPage() {
         : 0
       const totalBarterAmount = Math.max(noteDeduction, barterListDeduction)
 
-      const totalPaymentIncludingBarter = totalBarterAmount + totalClaimAmount
+      const totalPaymentIncludingBarter = totalBarterAmount + totalClaimAmount + totalStandalonePayments
       const remainingPayableAmount = Math.max(Number(item.contractAmount || 0) - totalPaymentIncludingBarter, 0)
       const completionPercent =
         item.contractAmount > 0 ? Math.min(Number(((totalClaimAmount / item.contractAmount) * 100).toFixed(1)), 100) : 0
@@ -319,6 +335,7 @@ export default function SubcontractorsPage() {
         totalClaimAmount,
         totalNet,
         totalPaid,
+        totalStandalonePayments,
         pendingNet,
         remainingPayableAmount,
         completionPercent,
@@ -329,13 +346,13 @@ export default function SubcontractorsPage() {
         analysisText,
       }
     })
-  }, [claims, subcontractors])
+  }, [claims, payments, subcontractors])
 
   const totals = useMemo(() => {
     const totalContractAmount = summaries.reduce((sum, summary) => sum + Number(summary.item.contractAmount || 0), 0)
     const totalClaimAmount = summaries.reduce((sum, summary) => sum + summary.totalClaimAmount, 0)
     const totalNet = summaries.reduce((sum, summary) => sum + summary.totalNet, 0)
-    const totalPaid = summaries.reduce((sum, summary) => sum + summary.totalPaid, 0)
+    const totalPaid = summaries.reduce((sum, summary) => sum + summary.totalPaid + summary.totalStandalonePayments, 0)
     const delayedCount = summaries.filter(summary => summary.status.key === 'delayed').length
     const averageCompletion =
       summaries.length > 0 ? summaries.reduce((sum, summary) => sum + summary.completionPercent, 0) / summaries.length : 0
@@ -554,7 +571,7 @@ export default function SubcontractorsPage() {
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Ödenen</div>
-                      <div className="mt-1 text-sm font-semibold text-emerald-700">{formatCurrency(summary.totalPaid)}</div>
+                      <div className="mt-1 text-sm font-semibold text-emerald-700">{formatCurrency(summary.totalPaid + summary.totalStandalonePayments)}</div>
                     </div>
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Bekleyen</div>

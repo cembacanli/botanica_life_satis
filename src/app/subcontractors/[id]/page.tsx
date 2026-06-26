@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import SubcontractorClaimModal, { SubcontractorClaimFormData } from '@/components/SubcontractorClaimModal'
@@ -57,6 +57,17 @@ interface SubcontractorClaim {
   isSigned?: boolean
 }
 
+interface SubcontractorPayment {
+  id: string
+  subcontractorId: string
+  subcontractorName: string
+  paymentDate: string
+  amount: number
+  paymentMethod?: string
+  note?: string
+  createdAt: string
+}
+
 interface CumulativeClaim extends SubcontractorClaim {
   sequenceNo: number
   cumulativeClaimAmount: number
@@ -65,6 +76,15 @@ interface CumulativeClaim extends SubcontractorClaim {
   cumulativeProgressPercent: number
   previousCumulativeClaimAmount: number
   isSigned: boolean
+}
+
+type ActiveTab = 'claims' | 'payments'
+
+interface PaymentFormData {
+  paymentDate: string
+  amount: string
+  paymentMethod: string
+  note: string
 }
 
 const statusStyles: Record<SubcontractorClaim['status'], string> = {
@@ -113,6 +133,16 @@ export default function SubcontractorDetailPage() {
   const [mounted, setMounted] = useState(false)
   const [subcontractor, setSubcontractor] = useState<Subcontractor | null>(null)
   const [claims, setClaims] = useState<SubcontractorClaim[]>([])
+  const [payments, setPayments] = useState<SubcontractorPayment[]>([])
+  const [activeTab, setActiveTab] = useState<ActiveTab>('claims')
+  const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
+    paymentDate: new Date().toISOString().slice(0, 10),
+    amount: '',
+    paymentMethod: '',
+    note: '',
+  })
+  const [paymentSaving, setPaymentSaving] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingClaim, setEditingClaim] = useState<SubcontractorClaim | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -159,6 +189,11 @@ export default function SubcontractorDetailPage() {
       .then(r => r.json())
       .then(data => setClaims(Array.isArray(data) ? data : []))
       .catch(() => setClaims([]))
+
+    fetch(`/api/subcontractor-payments?subcontractorId=${encodeURIComponent(subcontractorId)}`)
+      .then(r => r.json())
+      .then(data => setPayments(Array.isArray(data) ? data : []))
+      .catch(() => setPayments([]))
   }
 
   useEffect(() => {
@@ -247,6 +282,78 @@ export default function SubcontractorDetailPage() {
     }
   }
 
+  const handleSavePayment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!subcontractor) return
+
+    const amount = Math.round(Number(paymentForm.amount || 0))
+    if (!paymentForm.paymentDate) {
+      setPaymentError('Odeme tarihi gereklidir.')
+      return
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentError('Odeme tutari 0 dan buyuk olmalidir.')
+      return
+    }
+
+    setPaymentSaving(true)
+    setPaymentError('')
+    try {
+      const response = await fetch('/api/subcontractor-payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-actor-username': user?.username || '',
+        },
+        body: JSON.stringify({
+          subcontractorId: subcontractor.id,
+          subcontractorName: subcontractor.name,
+          paymentDate: paymentForm.paymentDate,
+          amount,
+          paymentMethod: paymentForm.paymentMethod,
+          note: paymentForm.note,
+        }),
+      })
+
+      const json = await response.json()
+      if (!response.ok) {
+        throw new Error(json?.error || 'Odeme kaydedilemedi.')
+      }
+
+      setPayments(prev => [json, ...prev])
+      setPaymentForm({
+        paymentDate: new Date().toISOString().slice(0, 10),
+        amount: '',
+        paymentMethod: '',
+        note: '',
+      })
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Odeme kaydedilemedi.')
+    } finally {
+      setPaymentSaving(false)
+    }
+  }
+
+  const handleDeletePayment = async (item: SubcontractorPayment) => {
+    const ok = window.confirm(`${formatCurrency(item.amount)} tutarindaki odemeyi silmek istiyor musunuz?`)
+    if (!ok) return
+
+    const response = await fetch('/api/subcontractor-payments', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-actor-username': user?.username || '',
+      },
+      body: JSON.stringify({ id: item.id }),
+    })
+    const json = await response.json()
+    if (!response.ok) {
+      alert(json?.error || 'Odeme silinemedi.')
+      return
+    }
+    setPayments(prev => prev.filter(payment => payment.id !== item.id))
+  }
+
   const handleToggleSigned = useCallback(async (item: SubcontractorClaim) => {
     if (signingId) return
     setSigningId(item.id)
@@ -310,6 +417,7 @@ export default function SubcontractorDetailPage() {
   const totals = useMemo(() => {
     const totalCurrentClaim = claims.reduce((sum, item) => sum + toNumber(item.currentClaimAmount), 0)
     const totalNetPayable = claims.reduce((sum, item) => sum + toNumber(item.netPayableAmount), 0)
+    const totalStandalonePayments = payments.reduce((sum, item) => sum + toNumber(item.amount), 0)
     const totalPaid = claims
       .filter(item => item.status === 'odendi')
       .reduce((sum, item) => sum + toNumber(item.netPayableAmount), 0)
@@ -319,8 +427,8 @@ export default function SubcontractorDetailPage() {
     const contractAmount = toNumber(subcontractor?.contractAmount)
     const cumulativeProgressPercent =
       contractAmount > 0 ? Math.min(Number(((totalCurrentClaim / contractAmount) * 100).toFixed(2)), 100) : 0
-    return { totalCurrentClaim, totalNetPayable, totalPaid, totalPending, cumulativeProgressPercent }
-  }, [claims, subcontractor?.contractAmount])
+    return { totalCurrentClaim, totalNetPayable, totalStandalonePayments, totalPaid, totalPending, cumulativeProgressPercent }
+  }, [claims, payments, subcontractor?.contractAmount])
 
   const cumulativeClaims = useMemo<CumulativeClaim[]>(() => {
     const contractAmount = toNumber(subcontractor?.contractAmount)
@@ -378,8 +486,8 @@ export default function SubcontractorDetailPage() {
   const remainingContractAmount = useMemo(() => {
     if (!subcontractor) return 0
     const contractAmount = toNumber(subcontractor.contractAmount)
-    return Math.max(contractAmount - totals.totalCurrentClaim - totalBarterAmount, 0)
-  }, [subcontractor, totals.totalCurrentClaim, totalBarterAmount])
+    return Math.max(contractAmount - totals.totalCurrentClaim - totalBarterAmount - totals.totalStandalonePayments, 0)
+  }, [subcontractor, totals.totalCurrentClaim, totals.totalStandalonePayments, totalBarterAmount])
 
   const formatDate = (value: string) => {
     if (!value) return '-'
@@ -518,6 +626,12 @@ export default function SubcontractorDetailPage() {
             </div>
           </div>
           <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Yapilan Odemeler</div>
+            <div className="text-xl md:text-2xl font-bold text-emerald-700 mt-1 truncate" title={formatCurrency(totals.totalStandalonePayments)}>
+              {formatCurrency(totals.totalStandalonePayments)}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bekleyen</div>
             <div className="text-xl md:text-2xl font-bold text-amber-700 mt-1 truncate" title={formatCurrency(totals.totalPending)}>
               {formatCurrency(totals.totalPending)}
@@ -525,8 +639,8 @@ export default function SubcontractorDetailPage() {
           </div>
           <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex flex-col justify-between min-h-[96px]">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ödenen</div>
-            <div className="text-xl md:text-2xl font-bold text-green-700 mt-1 truncate" title={formatCurrency(totals.totalPaid)}>
-              {formatCurrency(totals.totalPaid)}
+            <div className="text-xl md:text-2xl font-bold text-green-700 mt-1 truncate" title={formatCurrency(totals.totalPaid + totals.totalStandalonePayments)}>
+              {formatCurrency(totals.totalPaid + totals.totalStandalonePayments)}
             </div>
           </div>
         </div>
@@ -560,7 +674,112 @@ export default function SubcontractorDetailPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('claims')}
+            className={`px-4 py-2 text-sm rounded font-semibold ${
+              activeTab === 'claims'
+                ? 'bg-slate-900 text-white'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Hakedis Kayitlari
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('payments')}
+            className={`px-4 py-2 text-sm rounded font-semibold ${
+              activeTab === 'payments'
+                ? 'bg-slate-900 text-white'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Yapilan Odemeler
+          </button>
+        </div>
+
+        <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden mb-6 ${activeTab === 'payments' ? '' : 'hidden'}`}>
+          <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Yapilan Odemeler</div>
+          <div className="p-5 border-b bg-white">
+            <form onSubmit={handleSavePayment} className="grid gap-4 lg:grid-cols-[160px_180px_180px_minmax(0,1fr)_auto] lg:items-end">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-500 uppercase">Tarih</span>
+                <input
+                  type="date"
+                  value={paymentForm.paymentDate}
+                  onChange={event => setPaymentForm(prev => ({ ...prev, paymentDate: event.target.value }))}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-500 uppercase">Tutar</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={paymentForm.amount}
+                  onChange={event => setPaymentForm(prev => ({ ...prev, amount: event.target.value }))}
+                  placeholder="0"
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-500 uppercase">Odeme Tipi</span>
+                <input
+                  value={paymentForm.paymentMethod}
+                  onChange={event => setPaymentForm(prev => ({ ...prev, paymentMethod: event.target.value }))}
+                  placeholder="Nakit, banka..."
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-500 uppercase">Not</span>
+                <input
+                  value={paymentForm.note}
+                  onChange={event => setPaymentForm(prev => ({ ...prev, note: event.target.value }))}
+                  placeholder="Aciklama"
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={!subcontractor || paymentSaving}
+                className="rounded bg-emerald-700 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+              >
+                {paymentSaving ? 'Kaydediliyor' : 'Odeme Ekle'}
+              </button>
+            </form>
+            {paymentError && <div className="mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{paymentError}</div>}
+          </div>
+          {payments.length === 0 ? (
+            <div className="p-5 text-gray-500">Kayit yok</div>
+          ) : (
+            <div className="divide-y">
+              {payments.map(item => (
+                <div key={item.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold text-slate-900">{formatCurrency(item.amount)}</div>
+                    <div className="mt-1 flex flex-wrap gap-3 text-sm text-slate-500">
+                      <span>{formatDate(item.paymentDate)}</span>
+                      <span>{item.paymentMethod || 'Odeme tipi yok'}</span>
+                    </div>
+                    {item.note && <div className="mt-2 text-sm text-slate-600">{item.note}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePayment(item)}
+                    className="self-start rounded bg-red-100 px-4 py-2 text-sm text-red-700 hover:bg-red-200 md:self-center"
+                  >
+                    Sil
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={`bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden ${activeTab === 'claims' ? '' : 'hidden'}`}>
           <div className="px-5 py-4 border-b bg-gray-50 font-semibold text-lg text-gray-800">Hakediş Kayıtları</div>
           {sortedClaims.length === 0 ? (
             <div className="p-5 text-gray-500">Kayıt yok</div>

@@ -57,6 +57,17 @@ interface SubcontractorClaim {
   createdAt: string
 }
 
+interface SubcontractorPayment {
+  id: string
+  subcontractorId: string
+  subcontractorName: string
+  paymentDate: string
+  amount: number
+  paymentMethod?: string
+  note?: string
+  createdAt: string
+}
+
 type ContractStatusKey = 'all' | 'active' | 'closing' | 'delayed' | 'completed'
 
 interface ContractStatusMeta {
@@ -69,9 +80,12 @@ interface ContractStatusMeta {
 interface ContractSummary {
   subcontractor: Subcontractor
   claims: SubcontractorClaim[]
+  payments: SubcontractorPayment[]
   totalClaimAmount: number
   totalNetAccrued: number
   totalPaid: number
+  totalClaimPaid: number
+  totalStandalonePayments: number
   pendingPayment: number
   totalDeduction: number
   remainingContractAmount: number
@@ -84,6 +98,10 @@ interface ContractSummary {
   analysisText: string
   userNote: string
 }
+
+type FinancialFlowItem =
+  | { kind: 'claim'; date: string; createdAt: string; claim: SubcontractorClaim }
+  | { kind: 'payment'; date: string; createdAt: string; payment: SubcontractorPayment }
 
 const statusFilterOptions: Array<{ key: ContractStatusKey; label: string }> = [
   { key: 'all', label: 'Tümü' },
@@ -277,6 +295,7 @@ export default function ContractsPage() {
   const [mounted, setMounted] = useState(false)
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([])
   const [claims, setClaims] = useState<SubcontractorClaim[]>([])
+  const [payments, setPayments] = useState<SubcontractorPayment[]>([])
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<ContractStatusKey>('all')
@@ -288,14 +307,16 @@ export default function ContractsPage() {
     try {
       setError('')
 
-      const [subcontractorRes, claimsRes] = await Promise.all([
+      const [subcontractorRes, claimsRes, paymentsRes] = await Promise.all([
         fetch('/api/subcontractors', { cache: 'no-store' }),
         fetch('/api/subcontractor-claims', { cache: 'no-store' }),
+        fetch('/api/subcontractor-payments', { cache: 'no-store' }),
       ])
 
-      const [subcontractorData, claimsData] = await Promise.all([
+      const [subcontractorData, claimsData, paymentsData] = await Promise.all([
         subcontractorRes.json(),
         claimsRes.json(),
+        paymentsRes.json(),
       ])
 
       if (!subcontractorRes.ok) {
@@ -306,14 +327,20 @@ export default function ContractsPage() {
         throw new Error(claimsData?.error || 'Hakediş verileri alınamadı.')
       }
 
+      if (!paymentsRes.ok) {
+        throw new Error(paymentsData?.error || 'Ödeme verileri alınamadı.')
+      }
+
       setSubcontractors(Array.isArray(subcontractorData) ? subcontractorData : [])
       setClaims(Array.isArray(claimsData) ? claimsData : [])
+      setPayments(Array.isArray(paymentsData) ? paymentsData : [])
     } catch (loadError) {
       const message =
         loadError instanceof Error ? loadError.message : 'Sözleşme verileri alınamadı.'
       setError(message)
       setSubcontractors([])
       setClaims([])
+      setPayments([])
     }
   }
 
@@ -349,6 +376,13 @@ export default function ContractsPage() {
           const bTime = new Date(b.claimDate || b.createdAt || 0).getTime()
           return bTime - aTime
         })
+      const relatedPayments = payments
+        .filter(item => item.subcontractorId === subcontractor.id)
+        .sort((a, b) => {
+          const aTime = new Date(a.paymentDate || a.createdAt || 0).getTime()
+          const bTime = new Date(b.paymentDate || b.createdAt || 0).getTime()
+          return bTime - aTime
+        })
 
       const totalClaimAmount = relatedClaims.reduce(
         (sum, item) => sum + Number(item.currentClaimAmount || 0),
@@ -358,9 +392,14 @@ export default function ContractsPage() {
         (sum, item) => sum + Number(item.netPayableAmount || 0),
         0
       )
-      const totalPaid = relatedClaims
+      const totalClaimPaid = relatedClaims
         .filter(item => item.status === 'odendi')
         .reduce((sum, item) => sum + Number(item.netPayableAmount || 0), 0)
+      const totalStandalonePayments = relatedPayments.reduce(
+        (sum, item) => sum + Number(item.amount || 0),
+        0
+      )
+      const totalPaid = totalClaimPaid + totalStandalonePayments
       const totalDeduction = relatedClaims.reduce(
         (sum, item) => sum + Number(item.deductionAmount || 0),
         0
@@ -378,7 +417,7 @@ export default function ContractsPage() {
       const totalBarterAmount = Math.max(noteDeduction, barterListDeduction)
 
       const remainingContractAmount = Math.max(
-        Number(subcontractor.contractAmount || 0) - totalClaimAmount - totalBarterAmount,
+        Number(subcontractor.contractAmount || 0) - totalClaimAmount - totalBarterAmount - totalStandalonePayments,
         0
       )
       const completionPercent =
@@ -400,9 +439,12 @@ export default function ContractsPage() {
       return {
         subcontractor,
         claims: relatedClaims,
+        payments: relatedPayments,
         totalClaimAmount,
         totalNetAccrued,
         totalPaid,
+        totalClaimPaid,
+        totalStandalonePayments,
         pendingPayment,
         totalDeduction,
         remainingContractAmount,
@@ -416,7 +458,7 @@ export default function ContractsPage() {
         userNote,
       }
     })
-  }, [claims, subcontractors])
+  }, [claims, payments, subcontractors])
 
   const filteredContracts = useMemo(() => {
     const term = searchTerm.trim().toLocaleLowerCase('tr-TR')
@@ -466,6 +508,30 @@ export default function ContractsPage() {
     filteredContracts.find(item => item.subcontractor.id === selectedContractId) ||
     filteredContracts[0] ||
     null
+
+  const financialFlowItems = useMemo<FinancialFlowItem[]>(() => {
+    if (!selectedContract) return []
+
+    return [
+      ...selectedContract.claims.map(claim => ({
+        kind: 'claim' as const,
+        date: claim.claimDate,
+        createdAt: claim.createdAt,
+        claim,
+      })),
+      ...selectedContract.payments.map(payment => ({
+        kind: 'payment' as const,
+        date: payment.paymentDate,
+        createdAt: payment.createdAt,
+        payment,
+      })),
+    ].sort((a, b) => {
+      const aTime = new Date(a.date || a.createdAt || 0).getTime()
+      const bTime = new Date(b.date || b.createdAt || 0).getTime()
+      if (aTime !== bTime) return bTime - aTime
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+    })
+  }, [selectedContract])
 
   const totals = useMemo(() => {
     const totalContractAmount = contractSummaries.reduce(
@@ -603,7 +669,7 @@ export default function ContractsPage() {
               <SummaryCard
                 title="Ödenen Net"
                 value={formatCurrency(totals.totalPaid)}
-                helper="Durumu ödendi olan hakedişler"
+                helper="Hakediş ve yapılan ödeme toplamı"
               />
               <SummaryCard
                 title="Bekleyen Ödeme"
@@ -862,7 +928,7 @@ export default function ContractsPage() {
                     <DetailMetric
                       label="Kalan Sözleşme Bakiyesi"
                       value={formatCurrency(selectedContract.remainingContractAmount)}
-                      helper="Henüz hakedişe dönüşmeyen bölüm"
+                      helper="Hakediş, barter ve yapılan ödeme sonrası kalan tutar"
                     />
                     <DetailMetric
                       label="Net Tahakkuk"
@@ -875,9 +941,14 @@ export default function ContractsPage() {
                       helper="Hakedişler içinde kesilen toplam tutar"
                     />
                     <DetailMetric
+                      label="Yapılan Ödemeler"
+                      value={formatCurrency(selectedContract.totalStandalonePayments)}
+                      helper="Hakediş olmadan yapılan ödeme toplamı"
+                    />
+                    <DetailMetric
                       label="Ödenen Net"
                       value={formatCurrency(selectedContract.totalPaid)}
-                      helper="Durumu ödendi olan kayıtların toplamı"
+                      helper="Hakedişten ödenenler ve yapılan ödemeler toplamı"
                     />
                     <DetailMetric
                       label="Bekleyen Ödeme"
@@ -1061,90 +1132,146 @@ export default function ContractsPage() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        Hakediş Hareketleri
+                        Hakediş ve Ödeme Hareketleri
                       </div>
                       <h3 className="mt-2 text-xl font-semibold text-slate-900">
                         Finansal Akış
                       </h3>
                     </div>
                     <div className="text-sm text-slate-500">
-                      {selectedContract.claimCount} kayıt
+                      {financialFlowItems.length} kayıt
                     </div>
                   </div>
 
-                  {selectedContract.claims.length === 0 ? (
+                  {financialFlowItems.length === 0 ? (
                     <div className="mt-5 rounded-3xl bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                      Bu sözleşme için henüz hakediş kaydı yok.
+                      Bu sözleşme için henüz hakediş veya ödeme kaydı yok.
                     </div>
                   ) : (
                     <div className="mt-5 space-y-3">
-                      {selectedContract.claims.map(claim => (
-                        <div key={claim.id} className="rounded-3xl border border-slate-200 p-4">
-                          <div className="flex flex-col gap-4">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="text-base font-semibold text-slate-900">
-                                  {formatDate(claim.claimDate)}
+                      {financialFlowItems.map(item => {
+                        if (item.kind === 'payment') {
+                          const payment = item.payment
+                          return (
+                            <div key={`payment-${payment.id}`} className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-4">
+                              <div className="flex flex-col gap-4">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="text-base font-semibold text-slate-900">
+                                      {formatDate(payment.paymentDate)}
+                                    </div>
+                                    <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                                      Yapılan Ödeme
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 text-sm text-slate-600">
+                                    {payment.paymentMethod || 'Ödeme tipi belirtilmedi'}
+                                  </div>
+                                  {payment.note ? (
+                                    <div className="mt-2 text-sm leading-6 text-slate-500">{payment.note}</div>
+                                  ) : null}
                                 </div>
-                                <span
-                                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${claimStatusStyles[claim.status]}`}
-                                >
-                                  {claimStatusLabels[claim.status]}
-                                </span>
-                              </div>
-                              <div className="mt-1 text-sm text-slate-600">{claim.workItem}</div>
-                              {claim.note ? (
-                                <div className="mt-2 text-sm leading-6 text-slate-500">
-                                  {claim.note}
-                                </div>
-                              ) : null}
-                            </div>
 
-                            <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                  İlerleme
-                                </div>
-                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
-                                  %{Number(claim.progressPercent || 0).toFixed(1)}
-                                </div>
-                              </div>
-                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                  Önceki
-                                </div>
-                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
-                                  {formatCurrency(claim.previousPaidAmount)}
-                                </div>
-                              </div>
-                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                  Bu Hakediş
-                                </div>
-                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
-                                  {formatCurrency(claim.currentClaimAmount)}
-                                </div>
-                              </div>
-                              <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                  Kesinti
-                                </div>
-                                <div className="mt-1 whitespace-nowrap text-base font-semibold text-rose-700">
-                                  {formatCurrency(claim.deductionAmount)}
+                                <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                  <div className="min-w-0 rounded-2xl bg-white/80 px-4 py-3 ring-1 ring-emerald-100">
+                                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                      Ödeme Tutarı
+                                    </div>
+                                    <div className="mt-1 whitespace-nowrap text-base font-bold text-emerald-700">
+                                      {formatCurrency(payment.amount)}
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0 rounded-2xl bg-white/80 px-4 py-3 ring-1 ring-emerald-100">
+                                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                      Bakiye Etkisi
+                                    </div>
+                                    <div className="mt-1 whitespace-nowrap text-base font-semibold text-rose-700">
+                                      -{formatCurrency(payment.amount)}
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0 rounded-2xl bg-white/80 px-4 py-3 ring-1 ring-emerald-100">
+                                    <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                      İlerleme Etkisi
+                                    </div>
+                                    <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
+                                      %0
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="min-w-0 rounded-2xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-100">
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                                  Net Ödeme
+                            </div>
+                          )
+                        }
+
+                        const claim = item.claim
+                        return (
+                          <div key={`claim-${claim.id}`} className="rounded-3xl border border-slate-200 p-4">
+                            <div className="flex flex-col gap-4">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="text-base font-semibold text-slate-900">
+                                    {formatDate(claim.claimDate)}
+                                  </div>
+                                  <span
+                                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${claimStatusStyles[claim.status]}`}
+                                  >
+                                    {claimStatusLabels[claim.status]}
+                                  </span>
                                 </div>
-                                <div className="mt-1 whitespace-nowrap text-base font-bold text-emerald-700">
-                                  {formatCurrency(claim.netPayableAmount)}
+                                <div className="mt-1 text-sm text-slate-600">{claim.workItem}</div>
+                                {claim.note ? (
+                                  <div className="mt-2 text-sm leading-6 text-slate-500">
+                                    {claim.note}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                                <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
+                                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                    İlerleme
+                                  </div>
+                                  <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
+                                    %{Number(claim.progressPercent || 0).toFixed(1)}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
+                                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                    Önceki
+                                  </div>
+                                  <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
+                                    {formatCurrency(claim.previousPaidAmount)}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
+                                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                    Bu Hakediş
+                                  </div>
+                                  <div className="mt-1 whitespace-nowrap text-base font-semibold text-slate-900">
+                                    {formatCurrency(claim.currentClaimAmount)}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 rounded-2xl bg-slate-50 px-4 py-3">
+                                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                    Kesinti
+                                  </div>
+                                  <div className="mt-1 whitespace-nowrap text-base font-semibold text-rose-700">
+                                    {formatCurrency(claim.deductionAmount)}
+                                  </div>
+                                </div>
+                                <div className="min-w-0 rounded-2xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-100">
+                                  <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                                    Net Ödeme
+                                  </div>
+                                  <div className="mt-1 whitespace-nowrap text-base font-bold text-emerald-700">
+                                    {formatCurrency(claim.netPayableAmount)}
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </section>

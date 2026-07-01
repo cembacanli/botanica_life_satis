@@ -263,19 +263,12 @@ function SummaryCard({
   helper?: string
 }) {
   return (
-    <div className="rounded-3xl bg-white/10 p-5 ring-1 ring-white/10 backdrop-blur min-w-0 overflow-hidden">
-      <div className="text-xs sm:text-sm text-slate-200 truncate" title={title}>{title}</div>
-      <div 
-        className="mt-2 text-lg sm:text-xl md:text-2xl xl:text-base 2xl:text-xl font-bold text-white truncate" 
-        title={value}
-      >
+    <div className="rounded-3xl bg-white/10 p-5 ring-1 ring-white/10 backdrop-blur min-w-0">
+      <div className="text-sm text-slate-200">{title}</div>
+      <div className="mt-2 text-xl sm:text-2xl font-bold text-white whitespace-nowrap">
         {value}
       </div>
-      {helper ? (
-        <div className="mt-2 text-xs text-slate-300 truncate" title={helper}>
-          {helper}
-        </div>
-      ) : null}
+      {helper ? <div className="mt-2 text-xs text-slate-300">{helper}</div> : null}
     </div>
   )
 }
@@ -664,7 +657,7 @@ export default function ContractsPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <div className="mt-8 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               <SummaryCard
                 title="Toplam Portföy"
                 value={formatCurrency(totals.totalContractAmount)}

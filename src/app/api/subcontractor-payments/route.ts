@@ -36,7 +36,7 @@ function normalizeAndValidatePayload(body: PaymentPayload) {
   const subcontractorId = String(body?.subcontractorId || '').trim()
   const subcontractorName = String(body?.subcontractorName || '').trim()
   const paymentDate = String(body?.paymentDate || '').trim()
-  const amount = Math.round(Number(body?.amount || 0))
+  const amount = Number(Number(body?.amount || 0).toFixed(2))
   const paymentMethod = String(body?.paymentMethod || '').trim()
   const note = String(body?.note || '').trim()
 

@@ -88,7 +88,7 @@ create table if not exists public.subcontractor_payments (
   subcontractor_id uuid not null references public.subcontractors(id) on delete cascade,
   subcontractor_name text not null,
   payment_date date not null,
-  amount bigint not null check (amount > 0),
+  amount numeric(20,2) not null check (amount > 0),
   payment_method text default '',
   note text default '',
   created_at timestamptz not null default now()

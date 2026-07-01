@@ -286,7 +286,7 @@ export default function SubcontractorDetailPage() {
     event.preventDefault()
     if (!subcontractor) return
 
-    const amount = Math.round(Number(paymentForm.amount || 0))
+    const amount = Number(Number(paymentForm.amount || 0).toFixed(2))
     if (!paymentForm.paymentDate) {
       setPaymentError('Odeme tarihi gereklidir.')
       return
@@ -502,8 +502,8 @@ export default function SubcontractorDetailPage() {
     new Intl.NumberFormat('tr-TR', {
       style: 'currency',
       currency: 'TRY',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(value || 0)
 
   if (!mounted || loading) {
@@ -525,12 +525,7 @@ export default function SubcontractorDetailPage() {
             {subcontractor && (
               <div className="text-sm text-gray-500 mt-1">
                 Sözleşme: {subcontractor.contractDate} | Başlama: {subcontractor.workStartDate || subcontractor.contractDate} | Süre: {subcontractor.workDurationDays} gün | Tutar:{' '}
-                {new Intl.NumberFormat('tr-TR', {
-                  style: 'currency',
-                  currency: 'TRY',
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                }).format(subcontractor.contractAmount || 0)}
+                {formatCurrency(subcontractor.contractAmount)}
               </div>
             )}
           </div>
@@ -717,7 +712,7 @@ export default function SubcontractorDetailPage() {
                 <input
                   type="number"
                   min="0"
-                  step="1"
+                  step="any"
                   value={paymentForm.amount}
                   onChange={event => setPaymentForm(prev => ({ ...prev, amount: event.target.value }))}
                   placeholder="0"

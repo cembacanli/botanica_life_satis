@@ -56,12 +56,17 @@ export default function InsulationCalculator({ username }: { username: string })
           projectName: projectName,
           temelAlani,
           ampatmanYuksekligi,
+          ampatmanYuksekligiM,
           asansorCevresi,
           asansorYuksekligi,
           ampatmanGenisligi,
+          korumaBetonuKalinligi,
           membranFiyat,
+          proofMembranFiyat,
           astarFiyat,
+          korumaBetonuFiyat,
           temelIscilikFiyat,
+          temelYalitimTipi,
           perdeUzunlugu,
           perdeYuksekligi,
           perdeAmpatmanAlani,
@@ -102,13 +107,18 @@ export default function InsulationCalculator({ username }: { username: string })
     setProjectName(saved.projectName || '')
     setTemelAlani(proj.temelAlani ?? 914)
     setAmpatmanYuksekligi(proj.ampatmanYuksekligi ?? 124.2)
+    setAmpatmanYuksekligiM(proj.ampatmanYuksekligiM ?? 0.9)
     setAsansorCevresi(proj.asansorCevresi ?? 20)
     setAsansorYuksekligi(proj.asansorYuksekligi ?? 1.5)
     setAmpatmanGenisligi(proj.ampatmanGenisligi ?? 1)
+    setKorumaBetonuKalinligi(proj.korumaBetonuKalinligi ?? 5)
     
     setMembranFiyat(proj.membranFiyat ?? 100)
+    setProofMembranFiyat(proj.proofMembranFiyat ?? 155)
     setAstarFiyat(proj.astarFiyat ?? 3000)
+    setKorumaBetonuFiyat(proj.korumaBetonuFiyat ?? 150)
     setTemelIscilikFiyat(proj.temelIscilikFiyat ?? 25)
+    setTemelYalitimTipi(proj.temelYalitimTipi ?? 'klasik')
     
     setPerdeUzunlugu(proj.perdeUzunlugu ?? 117)
     setPerdeYuksekligi(proj.perdeYuksekligi ?? 3.5)
@@ -157,15 +167,20 @@ export default function InsulationCalculator({ username }: { username: string })
   }
 
   // --- TEMEL YALITIM STATES ---
+  const [temelYalitimTipi, setTemelYalitimTipi] = useState<'klasik' | 'proof' | null>(null)
   const [temelAlani, setTemelAlani] = useState<number>(914)
   const [ampatmanYuksekligi, setAmpatmanYuksekligi] = useState<number>(124.2)
+  const [ampatmanYuksekligiM, setAmpatmanYuksekligiM] = useState<number>(0.9)
   const [asansorCevresi, setAsansorCevresi] = useState<number>(20)
   const [asansorYuksekligi, setAsansorYuksekligi] = useState<number>(1.5)
   const [ampatmanGenisligi, setAmpatmanGenisligi] = useState<number>(1)
+  const [korumaBetonuKalinligi, setKorumaBetonuKalinligi] = useState<number>(5)
   
   // Temel Birim Fiyatlar
   const [membranFiyat, setMembranFiyat] = useState<number>(100)
+  const [proofMembranFiyat, setProofMembranFiyat] = useState<number>(155)
   const [astarFiyat, setAstarFiyat] = useState<number>(3000)
+  const [korumaBetonuFiyat, setKorumaBetonuFiyat] = useState<number>(150)
   const [temelIscilikFiyat, setTemelIscilikFiyat] = useState<number>(25)
 
   // --- PERDE YALITIM STATES ---
@@ -182,40 +197,69 @@ export default function InsulationCalculator({ username }: { username: string })
 
   // --- TEMEL HESAPLAMALAR ---
   const temelCalcs = useMemo(() => {
-    const ampatmanAlani = ampatmanYuksekligi * 0.9
+    const ampatmanAlani = ampatmanYuksekligi * ampatmanYuksekligiM
     const asansorAlani = asansorCevresi * asansorYuksekligi
     const ampatmanUzeriAlani = ampatmanGenisligi * ampatmanYuksekligi
     const toplamAlan = temelAlani + ampatmanAlani + asansorAlani + ampatmanUzeriAlani
-    const faydaliAlan = 8.91
+    
+    const isProof = temelYalitimTipi === 'proof'
+    const faydaliAlan = isProof ? 8.88 : 8.91
     const malzemeMetraji = toplamAlan / faydaliAlan
     const siparisAdedi = Math.ceil(malzemeMetraji)
     const siparisAdediM2 = siparisAdedi * 10
 
     // İş kalemleri tablosu
-    const items = [
-      {
-        name: 'Membran',
-        miktar: siparisAdediM2,
-        birim: 'm²',
-        birimFiyat: membranFiyat,
-      },
-      {
-        name: 'Astar',
-        miktar: (temelAlani + asansorAlani + ampatmanUzeriAlani) / 250,
-        birim: 'Adet',
-        birimFiyat: astarFiyat,
-      },
-      {
-        name: 'İşçilik',
-        miktar: toplamAlan,
-        birim: 'm²',
-        birimFiyat: temelIscilikFiyat,
-      }
-    ]
+    const items = isProof
+      ? [
+          {
+            name: 'Alteks Proof 3,5mm',
+            miktar: siparisAdediM2,
+            birim: 'm²',
+            birimFiyat: proofMembranFiyat,
+            kdvRate: 0.20
+          },
+          {
+            name: 'İşçilik',
+            miktar: toplamAlan,
+            birim: 'm²',
+            birimFiyat: temelIscilikFiyat,
+            kdvRate: 0
+          }
+        ]
+      : [
+          {
+            name: 'Membran',
+            miktar: siparisAdediM2,
+            birim: 'm²',
+            birimFiyat: membranFiyat,
+            kdvRate: 0.20
+          },
+          {
+            name: 'Astar',
+            miktar: (temelAlani + asansorAlani + ampatmanUzeriAlani) / 250,
+            birim: 'Adet',
+            birimFiyat: astarFiyat,
+            kdvRate: 0.20
+          },
+          {
+            name: 'Koruma Betonu',
+            miktar: temelAlani * (korumaBetonuKalinligi / 100),
+            birim: 'm³',
+            birimFiyat: korumaBetonuFiyat,
+            kdvRate: 0.20
+          },
+          {
+            name: 'İşçilik',
+            miktar: toplamAlan,
+            birim: 'm²',
+            birimFiyat: temelIscilikFiyat,
+            kdvRate: 0.20
+          }
+        ]
 
     const itemsCalculated = items.map(item => {
       const tutar = item.miktar * item.birimFiyat
-      const kdv = tutar * 0.20
+      const kdv = tutar * item.kdvRate
       const toplam = tutar + kdv
       return { ...item, tutar, kdv, toplam }
     })
@@ -238,7 +282,7 @@ export default function InsulationCalculator({ username }: { username: string })
       toplamKdv,
       genelToplam
     }
-  }, [temelAlani, ampatmanYuksekligi, asansorCevresi, asansorYuksekligi, ampatmanGenisligi, membranFiyat, astarFiyat, temelIscilikFiyat])
+  }, [temelAlani, ampatmanYuksekligi, ampatmanYuksekligiM, asansorCevresi, asansorYuksekligi, ampatmanGenisligi, korumaBetonuKalinligi, membranFiyat, proofMembranFiyat, astarFiyat, korumaBetonuFiyat, temelIscilikFiyat, temelYalitimTipi])
 
   // --- PERDE HESAPLAMALAR ---
   const perdeCalcs = useMemo(() => {
@@ -300,6 +344,52 @@ export default function InsulationCalculator({ username }: { username: string })
     }
   }, [perdeUzunlugu, perdeYuksekligi, perdeAmpatmanAlani, tamirHarciFiyat, surmeYalitimFiyat, xpsFiyat, drenajLevhasiFiyat, perdeIscilikFiyat])
 
+  // --- KARŞILAŞTIRMA HESAPLAMALARI ---
+  const comparisonCalcs = useMemo(() => {
+    const ampatmanAlani = ampatmanYuksekligi * ampatmanYuksekligiM
+    const asansorAlani = asansorCevresi * asansorYuksekligi
+    const ampatmanUzeriAlani = ampatmanGenisligi * ampatmanYuksekligi
+    const toplamAlan = temelAlani + ampatmanAlani + asansorAlani + ampatmanUzeriAlani
+
+    // 1. Klasik Membran
+    const classicFaydaliAlan = 8.91
+    const classicSiparisAdediM2 = Math.ceil(toplamAlan / classicFaydaliAlan) * 10
+    const classicMembranTutar = classicSiparisAdediM2 * membranFiyat
+    const classicAstarTutar = ((temelAlani + asansorAlani + ampatmanUzeriAlani) / 250) * astarFiyat
+    const classicKorumaBetonuTutar = (temelAlani * (korumaBetonuKalinligi / 100)) * korumaBetonuFiyat
+    const classicIscilikTutar = toplamAlan * temelIscilikFiyat
+
+    const classicTutarNet = classicMembranTutar + classicAstarTutar + classicKorumaBetonuTutar + classicIscilikTutar
+    const classicKdv = classicTutarNet * 0.20
+    const classicTotal = classicTutarNet + classicKdv
+
+    // 2. Proof Membran
+    const proofFaydaliAlan = 8.88
+    const proofSiparisAdediM2 = Math.ceil(toplamAlan / proofFaydaliAlan) * 10
+    const proofMembranTutar = proofSiparisAdediM2 * proofMembranFiyat
+    const proofIscilikTutar = toplamAlan * temelIscilikFiyat
+
+    const proofKdv = proofMembranTutar * 0.20
+    const proofTotal = (proofMembranTutar + proofKdv) + proofIscilikTutar
+
+    // 3. Fark
+    const diff = Math.abs(classicTotal - proofTotal)
+    const isProofCheaper = proofTotal < classicTotal
+    const cheaperOption = isProofCheaper ? 'Proof Membran' : 'Klasik Membran'
+    const expensiveOption = isProofCheaper ? 'Klasik Membran' : 'Proof Membran'
+    const percentage = classicTotal > 0 || proofTotal > 0 ? (diff / Math.max(classicTotal, proofTotal)) * 100 : 0
+
+    return {
+      classicTotal,
+      proofTotal,
+      diff,
+      isProofCheaper,
+      cheaperOption,
+      expensiveOption,
+      percentage
+    }
+  }, [temelAlani, ampatmanYuksekligi, ampatmanYuksekligiM, asansorCevresi, asansorYuksekligi, ampatmanGenisligi, membranFiyat, proofMembranFiyat, astarFiyat, korumaBetonuFiyat, korumaBetonuKalinligi, temelIscilikFiyat])
+
   const formatNumber = (num: number, decimals: number = 2) => {
     return num.toLocaleString('tr-TR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
   }
@@ -359,6 +449,7 @@ export default function InsulationCalculator({ username }: { username: string })
                 onClick={() => {
                   setActiveProjectId(null)
                   setProjectName('')
+                  setTemelYalitimTipi(null)
                 }}
                 className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-50"
               >
@@ -427,167 +518,275 @@ export default function InsulationCalculator({ username }: { username: string })
         <div className="grid gap-8 lg:grid-cols-2">
           {/* ==================== TEMEL YALITIMI HESAP ADIMLARI ==================== */}
           <div className="flex flex-col rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-            <div className="mb-6 border-b border-stone-100 pb-4">
-              <h2 className="text-2xl font-bold tracking-tight text-stone-900">Temel Yalıtım Hesap Adımları</h2>
-              <p className="mt-1 text-sm text-stone-500">Sarı alanlar veri giriş bölümleridir. Diğer hesaplamalar otomatiktir.</p>
-            </div>
-
-            {/* Inputs Section */}
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="mb-6 border-b border-stone-100 pb-4 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Temel Alanı (m²)</label>
-                <input
-                  type="number"
-                  value={temelAlani}
-                  onChange={(e) => setTemelAlani(parseFloat(e.target.value) || 0)}
-                  className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                />
+                <h2 className="text-2xl font-bold tracking-tight text-stone-900">Temel Yalıtım Hesap Adımları</h2>
+                <p className="mt-1 text-sm text-stone-500">Sarı alanlar veri giriş bölümleridir. Diğer hesaplamalar otomatiktir.</p>
               </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Ampatman Çevresi (m)</label>
-                <input
-                  type="number"
-                  value={ampatmanYuksekligi}
-                  onChange={(e) => setAmpatmanYuksekligi(parseFloat(e.target.value) || 0)}
-                  className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Asansör Çukuru Çevresi (m)</label>
-                <input
-                  type="number"
-                  value={asansorCevresi}
-                  onChange={(e) => setAsansorCevresi(parseFloat(e.target.value) || 0)}
-                  className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Asansör Çukuru Yüksekliği (m)</label>
-                <input
-                  type="number"
-                  value={asansorYuksekligi}
-                  onChange={(e) => setAsansorYuksekligi(parseFloat(e.target.value) || 0)}
-                  className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Ampatman Genişliği (m)</label>
-                <input
-                  type="number"
-                  value={ampatmanGenisligi}
-                  onChange={(e) => setAmpatmanGenisligi(parseFloat(e.target.value) || 0)}
-                  className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                />
-              </div>
-            </div>
-
-            {/* Intermediate Calculations Display */}
-            <div className="mt-6 rounded-2xl bg-stone-50 p-4 border border-stone-100 space-y-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400 mb-3">Hesaplanan Ara Değerler</h3>
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Ampatman Yalıtım Alanı (+Çevre * 0.9):</span>
-                <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.ampatmanAlani)} m²</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Asansör Çukuru (+Cevre * Yukseklik):</span>
-                <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.asansorAlani)} m²</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Ampatman Üzeri Alanı (+Genislik * Çevre):</span>
-                <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.ampatmanUzeriAlani)} m²</span>
-              </div>
-              <div className="flex justify-between text-sm border-t border-stone-200/60 pt-2 font-medium">
-                <span className="text-stone-900 font-bold">Toplam Alan:</span>
-                <span className="text-stone-950 font-bold">{formatNumber(temelCalcs.toplamAlan)} m²</span>
-              </div>
-              <div className="flex justify-between text-xs text-stone-500 pt-1">
-                <span>Faydalı Alan (10m² Ruloda):</span>
-                <span>8,91 m²</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-stone-600">Malzeme Metrajı:</span>
-                <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.malzemeMetraji)} Adet</span>
-              </div>
-              <div className="flex justify-between text-sm font-bold text-amber-900">
-                <span>Sipariş Rulo Adedi (Yukarı Yuvarlanır):</span>
-                <span>{temelCalcs.siparisAdedi} Adet</span>
-              </div>
-              <div className="flex justify-between text-sm font-bold text-amber-950">
-                <span>Toplam Sipariş Metrajı (Rulo * 10):</span>
-                <span>{temelCalcs.siparisAdediM2} m²</span>
-              </div>
-            </div>
-
-            {/* Pricing inputs & Work items */}
-            <div className="mt-8">
-              <h3 className="text-lg font-bold text-stone-900 mb-4">Temel Yalıtım Birim Fiyat Girişleri</h3>
-              <div className="grid gap-4 sm:grid-cols-3 mb-6">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500">Membran Fiyatı (TL/m²)</label>
-                  <input
-                    type="number"
-                    value={membranFiyat}
-                    onChange={(e) => setMembranFiyat(parseFloat(e.target.value) || 0)}
-                    className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
+              {temelYalitimTipi && (
+                <div className="inline-flex rounded-full bg-stone-100 p-0.5 border border-stone-200">
+                  <button
+                    onClick={() => setTemelYalitimTipi('proof')}
+                    className={`rounded-full px-4 py-1.5 text-xs font-bold transition-all ${temelYalitimTipi === 'proof' ? 'bg-amber-600 text-white shadow-sm' : 'text-stone-600 hover:text-stone-900'}`}
+                  >
+                    Proof Membran
+                  </button>
+                  <button
+                    onClick={() => setTemelYalitimTipi('klasik')}
+                    className={`rounded-full px-4 py-1.5 text-xs font-bold transition-all ${temelYalitimTipi === 'klasik' ? 'bg-amber-600 text-white shadow-sm' : 'text-stone-600 hover:text-stone-900'}`}
+                  >
+                    Klasik Membran
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500">Astar Fiyatı (TL/Adet)</label>
-                  <input
-                    type="number"
-                    value={astarFiyat}
-                    onChange={(e) => setAstarFiyat(parseFloat(e.target.value) || 0)}
-                    className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
+              )}
+            </div>
+
+            {!temelYalitimTipi ? (
+              /* Step 1: Product Selection Wizard */
+              <div className="flex flex-col items-center justify-center py-10 text-center space-y-6 my-auto">
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-stone-900">Temel Yalıtım Ürünü Seçimi</h3>
+                  <p className="text-sm text-stone-500 max-w-md">Temel yalıtımında kullanmak istediğiniz ürünü seçerek hesaplamaya başlayabilirsiniz.</p>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-500">İşçilik Fiyatı (TL/m²)</label>
-                  <input
-                    type="number"
-                    value={temelIscilikFiyat}
-                    onChange={(e) => setTemelIscilikFiyat(parseFloat(e.target.value) || 0)}
-                    className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
+                <div className="grid gap-4 sm:grid-cols-2 w-full max-w-lg">
+                  <button
+                    onClick={() => setTemelYalitimTipi('proof')}
+                    className="flex flex-col items-center justify-center p-6 rounded-2xl border border-stone-200 bg-stone-50/50 hover:bg-amber-50/30 hover:border-amber-500 transition cursor-pointer text-center focus:outline-none ring-1 ring-transparent hover:ring-amber-500/20"
+                  >
+                    <div className="p-3 bg-amber-500/10 text-amber-600 rounded-full mb-3">
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <span className="text-base font-bold text-stone-900">Proof Membran</span>
+                    <span className="text-xs text-stone-500 mt-2 leading-relaxed">Alteks Proof 3.5mm taze betona yapışan membran (astar ve koruma betonu gerektirmez).</span>
+                  </button>
+                  <button
+                    onClick={() => setTemelYalitimTipi('klasik')}
+                    className="flex flex-col items-center justify-center p-6 rounded-2xl border border-stone-200 bg-stone-50/50 hover:bg-amber-50/30 hover:border-amber-500 transition cursor-pointer text-center focus:outline-none ring-1 ring-transparent hover:ring-amber-500/20"
+                  >
+                    <div className="p-3 bg-stone-500/10 text-stone-600 rounded-full mb-3">
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                    <span className="text-base font-bold text-stone-900">Klasik Membran</span>
+                    <span className="text-xs text-stone-500 mt-2 leading-relaxed">2 kat membran uygulaması ve astar kullanımı gerektirir.</span>
+                  </button>
                 </div>
               </div>
+            ) : (
+              /* Step 2: Inputs and Calculations */
+              <>
+                {/* Inputs Section */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Temel Alanı (m²)</label>
+                    <input
+                      type="number"
+                      value={temelAlani}
+                      onChange={(e) => setTemelAlani(parseFloat(e.target.value) || 0)}
+                      className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Ampatman Çevresi (m)</label>
+                    <input
+                      type="number"
+                      value={ampatmanYuksekligi}
+                      onChange={(e) => setAmpatmanYuksekligi(parseFloat(e.target.value) || 0)}
+                      className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Temel Ampatman Yüksekliği (m)</label>
+                    <input
+                      type="number"
+                      value={ampatmanYuksekligiM}
+                      onChange={(e) => setAmpatmanYuksekligiM(parseFloat(e.target.value) || 0)}
+                      className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Asansör Çukuru Çevresi (m)</label>
+                    <input
+                      type="number"
+                      value={asansorCevresi}
+                      onChange={(e) => setAsansorCevresi(parseFloat(e.target.value) || 0)}
+                      className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Asansör Çukuru Yüksekliği (m)</label>
+                    <input
+                      type="number"
+                      value={asansorYuksekligi}
+                      onChange={(e) => setAsansorYuksekligi(parseFloat(e.target.value) || 0)}
+                      className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">Ampatman Genişliği (m)</label>
+                    <input
+                      type="number"
+                      value={ampatmanGenisligi}
+                      onChange={(e) => setAmpatmanGenisligi(parseFloat(e.target.value) || 0)}
+                      className="mt-1.5 w-full rounded-2xl border border-stone-200 bg-amber-50 px-4 py-3 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-stone-200 text-stone-500">
-                      <th className="py-2.5 font-bold">İş Kalemi</th>
-                      <th className="py-2.5 font-bold text-right">Miktar</th>
-                      <th className="py-2.5 font-bold text-center">Birim</th>
-                      <th className="py-2.5 font-bold text-right">B. Fiyat</th>
-                      <th className="py-2.5 font-bold text-right">Tutar</th>
-                      <th className="py-2.5 font-bold text-right">KDV (%20)</th>
-                      <th className="py-2.5 font-bold text-right">KDV Dahil</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {temelCalcs.items.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-stone-50/50">
-                        <td className="py-3 font-semibold text-stone-900">{item.name}</td>
-                        <td className="py-3 text-right text-stone-700">{formatNumber(item.miktar)}</td>
-                        <td className="py-3 text-center text-stone-500">{item.birim}</td>
-                        <td className="py-3 text-right text-stone-900">{formatNumber(item.birimFiyat)} TL</td>
-                        <td className="py-3 text-right text-stone-900 font-medium">{formatNumber(item.tutar)} TL</td>
-                        <td className="py-3 text-right text-stone-500">{formatNumber(item.kdv)} TL</td>
-                        <td className="py-3 text-right text-stone-900 font-bold">{formatNumber(item.toplam)} TL</td>
-                      </tr>
-                    ))}
-                    <tr className="bg-stone-900 text-white font-bold">
-                      <td className="py-3 px-2 rounded-l-2xl">TOPLAM</td>
-                      <td colSpan={3}></td>
-                      <td className="py-3 text-right">{formatNumber(temelCalcs.toplamTutar)} TL</td>
-                      <td className="py-3 text-right">{formatNumber(temelCalcs.toplamKdv)} TL</td>
-                      <td className="py-3 text-right pr-2 rounded-r-2xl">{formatNumber(temelCalcs.genelToplam)} TL</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                {/* Intermediate Calculations Display */}
+                <div className="mt-6 rounded-2xl bg-stone-50 p-4 border border-stone-100 space-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400 mb-3">Hesaplanan Ara Değerler</h3>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-stone-600">Ampatman Yalıtım Alanı (+Çevre * {formatNumber(ampatmanYuksekligiM)}):</span>
+                    <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.ampatmanAlani)} m²</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-stone-600">Asansör Çukuru (+Cevre * Yukseklik):</span>
+                    <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.asansorAlani)} m²</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-stone-600">Ampatman Üzeri Alanı (+Genislik * Çevre):</span>
+                    <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.ampatmanUzeriAlani)} m²</span>
+                  </div>
+                  <div className="flex justify-between text-sm border-t border-stone-200/60 pt-2 font-medium">
+                    <span className="text-stone-900 font-bold">Toplam Alan:</span>
+                    <span className="text-stone-950 font-bold">{formatNumber(temelCalcs.toplamAlan)} m²</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-stone-500 pt-1">
+                    <span>Faydalı Alan (10m² Ruloda):</span>
+                    <span>{formatNumber(temelCalcs.faydaliAlan)} m²</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-stone-600">Malzeme Metrajı:</span>
+                    <span className="font-semibold text-stone-900">{formatNumber(temelCalcs.malzemeMetraji)} Adet</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold text-amber-900">
+                    <span>Sipariş Rulo Adedi (Yukarı Yuvarlanır):</span>
+                    <span>{temelCalcs.siparisAdedi} Adet</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold text-amber-950">
+                    <span>Toplam Sipariş Metrajı (Rulo * 10):</span>
+                    <span>{temelCalcs.siparisAdediM2} m²</span>
+                  </div>
+                </div>
+
+                {/* Pricing inputs & Work items */}
+                <div className="mt-8">
+                  <h3 className="text-lg font-bold text-stone-900 mb-4">Temel Yalıtım Birim Fiyat Girişleri</h3>
+                  
+                  {temelYalitimTipi === 'proof' ? (
+                    <div className="grid gap-4 sm:grid-cols-2 mb-6">
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">Proof Malzeme Fiyatı (TL/m²)</label>
+                        <input
+                          type="number"
+                          value={proofMembranFiyat}
+                          onChange={(e) => setProofMembranFiyat(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">İşçilik Fiyatı (TL/m²)</label>
+                        <input
+                          type="number"
+                          value={temelIscilikFiyat}
+                          onChange={(e) => setTemelIscilikFiyat(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">Membran Fiyatı (TL/m²)</label>
+                        <input
+                          type="number"
+                          value={membranFiyat}
+                          onChange={(e) => setMembranFiyat(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">Astar Fiyatı (TL/Adet)</label>
+                        <input
+                          type="number"
+                          value={astarFiyat}
+                          onChange={(e) => setAstarFiyat(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">Koruma Betonu Kalınlığı (cm)</label>
+                        <input
+                          type="number"
+                          value={korumaBetonuKalinligi}
+                          onChange={(e) => setKorumaBetonuKalinligi(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">Koruma Betonu Fiyatı (TL/m³)</label>
+                        <input
+                          type="number"
+                          value={korumaBetonuFiyat}
+                          onChange={(e) => setKorumaBetonuFiyat(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-500">İşçilik Fiyatı (TL/m²)</label>
+                        <input
+                          type="number"
+                          value={temelIscilikFiyat}
+                          onChange={(e) => setTemelIscilikFiyat(parseFloat(e.target.value) || 0)}
+                          className="mt-1 w-full rounded-xl border border-stone-200 bg-amber-50 px-3 py-2 text-stone-900 font-medium focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-stone-200 text-stone-500">
+                          <th className="py-2.5 font-bold">İş Kalemi</th>
+                          <th className="py-2.5 font-bold text-right">Miktar</th>
+                          <th className="py-2.5 font-bold text-center">Birim</th>
+                          <th className="py-2.5 font-bold text-right">B. Fiyat</th>
+                          <th className="py-2.5 font-bold text-right">Tutar</th>
+                          <th className="py-2.5 font-bold text-right">KDV (%20)</th>
+                          <th className="py-2.5 font-bold text-right">KDV Dahil</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {temelCalcs.items.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-stone-50/50">
+                            <td className="py-3 font-semibold text-stone-900">{item.name}</td>
+                            <td className="py-3 text-right text-stone-700">{formatNumber(item.miktar)}</td>
+                            <td className="py-3 text-center text-stone-500">{item.birim}</td>
+                            <td className="py-3 text-right text-stone-900">{formatNumber(item.birimFiyat)} TL</td>
+                            <td className="py-3 text-right text-stone-900 font-medium">{formatNumber(item.tutar)} TL</td>
+                            <td className="py-3 text-right text-stone-500">{item.kdv > 0 ? `${formatNumber(item.kdv)} TL` : '-'}</td>
+                            <td className="py-3 text-right text-stone-900 font-bold">{formatNumber(item.toplam)} TL</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-stone-900 text-white font-bold">
+                          <td className="py-3 px-2 rounded-l-2xl">TOPLAM</td>
+                          <td colSpan={3}></td>
+                          <td className="py-3 text-right">{formatNumber(temelCalcs.toplamTutar)} TL</td>
+                          <td className="py-3 text-right">{formatNumber(temelCalcs.toplamKdv)} TL</td>
+                          <td className="py-3 text-right pr-2 rounded-r-2xl">{formatNumber(temelCalcs.genelToplam)} TL</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* ==================== PERDE YALITIMI HESAP ADIMLARI ==================== */}
@@ -757,6 +956,76 @@ export default function InsulationCalculator({ username }: { username: string })
             </div>
           </div>
         </div>
+
+        {/* HESAP SEÇENEK KARŞILAŞTIRMASI */}
+        {temelYalitimTipi && (
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
+            <h3 className="text-xl font-bold text-stone-900 mb-1">Temel Yalıtım Seçenek Karşılaştırması</h3>
+            <p className="text-sm text-stone-500 mb-6">Farklı malzeme türlerinin toplam hakediş (KDV Dahil) karşılaştırması aşağıda listelenmiştir.</p>
+            
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+              {/* Klasik Membran Option Card */}
+              <div className={`rounded-2xl p-5 border-2 transition ${temelYalitimTipi === 'klasik' ? 'border-amber-500 bg-amber-50/20' : 'border-stone-200 bg-stone-50/50'}`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-bold text-stone-900">Klasik Membran Çözümü</h4>
+                    <p className="text-xs text-stone-500 mt-1">2 Kat Membran + Astar + Koruma Betonu + İşçilik</p>
+                  </div>
+                  {temelYalitimTipi === 'klasik' && (
+                    <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase shadow-sm">Aktif Seçim</span>
+                  )}
+                </div>
+                <div className="mt-6">
+                  <span className="text-xs text-stone-400 font-semibold block uppercase">Toplam Maliyet (KDV Dahil)</span>
+                  <span className="text-2xl font-black text-stone-900 mt-1 block">{formatNumber(comparisonCalcs.classicTotal)} TL</span>
+                </div>
+              </div>
+
+              {/* Proof Membran Option Card */}
+              <div className={`rounded-2xl p-5 border-2 transition ${temelYalitimTipi === 'proof' ? 'border-amber-500 bg-amber-50/20' : 'border-stone-200 bg-stone-50/50'}`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-bold text-stone-900">Proof Membran Çözümü</h4>
+                    <p className="text-xs text-stone-500 mt-1">Alteks Proof 3.5mm + İşçilik (Astar ve Betonsuz)</p>
+                  </div>
+                  {temelYalitimTipi === 'proof' && (
+                    <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase shadow-sm">Aktif Seçim</span>
+                  )}
+                </div>
+                <div className="mt-6">
+                  <span className="text-xs text-stone-400 font-semibold block uppercase">Toplam Maliyet (KDV Dahil)</span>
+                  <span className="text-2xl font-black text-stone-900 mt-1 block">{formatNumber(comparisonCalcs.proofTotal)} TL</span>
+                </div>
+              </div>
+
+              {/* Comparison Summary Card */}
+              <div className="rounded-2xl p-5 bg-gradient-to-br from-amber-500/10 to-amber-900/10 border border-amber-500/20 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-amber-900">Maliyet Karşılaştırma Sonucu</h4>
+                  <p className="text-xs text-amber-800/80 mt-0.5">En ekonomik seçenek hangisi?</p>
+                </div>
+                
+                <div className="mt-4">
+                  {comparisonCalcs.diff === 0 ? (
+                    <div className="text-sm font-semibold text-stone-700">Her iki seçenek de eşit maliyettedir.</div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-stone-800">
+                        <strong className="text-amber-800">{comparisonCalcs.cheaperOption}</strong> seçeneği, {comparisonCalcs.expensiveOption} seçeneğine kıyasla daha ekonomiktir.
+                      </div>
+                      <div className="text-xs text-stone-500">
+                        Aradaki fark:
+                      </div>
+                      <div className="text-xl font-extrabold text-emerald-700">
+                        {formatNumber(comparisonCalcs.diff)} TL ({formatNumber(comparisonCalcs.percentage, 1)}%)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ================= PRINT VIEW (FORMAL REPORT) ================= */}
@@ -782,8 +1051,13 @@ export default function InsulationCalculator({ username }: { username: string })
             <h3 className="font-bold border-b border-stone-200 pb-1 mb-2 text-stone-800 uppercase tracking-wide">1. TEMEL YALITIM METRAJLARI</h3>
             <table className="w-full text-left text-[10px] space-y-1">
               <tbody>
+                <tr><td className="text-stone-500">Yalıtım Tipi:</td><td className="text-right font-bold text-amber-900">{temelYalitimTipi === 'proof' ? 'Proof Membran' : 'Klasik Membran'}</td></tr>
                 <tr><td className="text-stone-500">Temel Alanı:</td><td className="text-right font-bold">{formatNumber(temelAlani)} m²</td></tr>
                 <tr><td className="text-stone-500">Ampatman Çevresi:</td><td className="text-right font-bold">{formatNumber(ampatmanYuksekligi)} m</td></tr>
+                <tr><td className="text-stone-500">Ampatman Yüksekliği:</td><td className="text-right font-bold">{formatNumber(ampatmanYuksekligiM)} m</td></tr>
+                {temelYalitimTipi === 'klasik' && (
+                  <tr><td className="text-stone-500">Koruma Betonu Kalınlığı:</td><td className="text-right font-bold">{korumaBetonuKalinligi} cm</td></tr>
+                )}
                 <tr><td className="text-stone-500">Ampatman Yalıtım Alanı:</td><td className="text-right font-bold">{formatNumber(temelCalcs.ampatmanAlani)} m²</td></tr>
                 <tr><td className="text-stone-500">Asansör Çukuru Alanı:</td><td className="text-right font-bold">{formatNumber(temelCalcs.asansorAlani)} m²</td></tr>
                 <tr><td className="text-stone-500">Ampatman Üzeri Alanı:</td><td className="text-right font-bold">{formatNumber(temelCalcs.ampatmanUzeriAlani)} m²</td></tr>
@@ -812,7 +1086,7 @@ export default function InsulationCalculator({ username }: { username: string })
         <div className="space-y-6">
           {/* Temel Kalemler Tablosu */}
           <div>
-            <h4 className="font-bold text-[10px] text-stone-800 mb-1.5 uppercase">Temel Yalıtımı Hakediş Detayı</h4>
+            <h4 className="font-bold text-[10px] text-stone-800 mb-1.5 uppercase">Temel Yalıtımı Hakediş Detayı ({temelYalitimTipi === 'proof' ? 'Proof Membran' : 'Klasik Membran'})</h4>
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr className="border-y border-stone-800 text-stone-700 bg-stone-100">
@@ -821,7 +1095,7 @@ export default function InsulationCalculator({ username }: { username: string })
                   <th className="py-1 text-center px-2 font-bold">Birim</th>
                   <th className="py-1 text-right px-2 font-bold">Birim Fiyat</th>
                   <th className="py-1 text-right px-2 font-bold">Tutar</th>
-                  <th className="py-1 text-right px-2 font-bold">KDV (%20)</th>
+                  <th className="py-1 text-right px-2 font-bold">KDV</th>
                   <th className="py-1 text-right px-2 font-bold">Toplam</th>
                 </tr>
               </thead>
@@ -833,7 +1107,7 @@ export default function InsulationCalculator({ username }: { username: string })
                     <td className="py-1.5 px-2 text-center text-stone-500">{item.birim}</td>
                     <td className="py-1.5 px-2 text-right">{formatNumber(item.birimFiyat)} TL</td>
                     <td className="py-1.5 px-2 text-right">{formatNumber(item.tutar)} TL</td>
-                    <td className="py-1.5 px-2 text-right text-stone-500">{formatNumber(item.kdv)} TL</td>
+                    <td className="py-1.5 px-2 text-right text-stone-500">{item.kdv > 0 ? `${formatNumber(item.kdv)} TL` : '-'}</td>
                     <td className="py-1.5 px-2 text-right font-bold">{formatNumber(item.toplam)} TL</td>
                   </tr>
                 ))}

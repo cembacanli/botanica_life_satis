@@ -193,7 +193,7 @@ export default function WallMaterialCalculator({ username = '' }: { username?: s
   const [serverMessage, setServerMessage] = useState('')
 
   const filteredProjects = useMemo(() => {
-    return savedProjects.filter(p => !(p.project as any)?.isInsulation)
+    return savedProjects.filter(p => !(p.project as any)?.isInsulation && !(p.project as any)?.isPlasterPaint && !(p.project as any)?.isCeramic)
   }, [savedProjects])
 
   useEffect(() => {

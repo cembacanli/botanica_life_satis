@@ -98,33 +98,43 @@ export default function MaterialProcurementPage() {
               </div>
             </button>
 
-            <div className="rounded-[28px] border border-dashed border-stone-300 bg-stone-50/70 p-6">
-              <div className="inline-flex rounded-full bg-stone-200 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-stone-600">
-                HAZIR KART
+            <button
+              onClick={() => router.push('/material-procurement/plaster-paint-calculator')}
+              className="group rounded-[28px] border border-stone-200 bg-stone-50 p-6 text-left transition hover:border-amber-300 hover:bg-amber-50"
+            >
+              <div className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-amber-700">
+                AKTİF ALT MODÜL
               </div>
               <h4 className="mt-4 text-2xl font-bold text-stone-900">Sıva ve Boya Metraj Programı</h4>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                İç ve dış sıva, boya, yüzey alanı ve birim maliyet hesapları için kullanılacak hazır alt modül alanı.
+                İç ve dış sıva, boya, yüzey alanı ve malzeme ihtiyaçları ile birim maliyet hesaplarını yönetin.
               </p>
               <div className="mt-5 flex items-center justify-between">
-                <span className="rounded-full bg-stone-200 px-3 py-1 text-xs font-semibold text-stone-600">Yakında</span>
-                <span className="text-sm font-semibold text-stone-500">Aktif değil</span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Hazır</span>
+                <span className="text-sm font-semibold text-amber-700 group-hover:text-amber-800">
+                  Alt modüle git
+                </span>
               </div>
-            </div>
+            </button>
 
-            <div className="rounded-[28px] border border-dashed border-stone-300 bg-stone-50/70 p-6">
-              <div className="inline-flex rounded-full bg-stone-200 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-stone-600">
-                HAZIR KART
+            <button
+              onClick={() => router.push('/material-procurement/ceramic-calculator')}
+              className="group rounded-[28px] border border-stone-200 bg-stone-50 p-6 text-left transition hover:border-amber-300 hover:bg-amber-50"
+            >
+              <div className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-amber-700">
+                AKTİF ALT MODÜL
               </div>
               <h4 className="mt-4 text-2xl font-bold text-stone-900">Seramik Metraj Programı</h4>
               <p className="mt-3 text-sm leading-6 text-stone-600">
-                Zemin ve duvar seramiği metrajı, fire oranı, adet ve kutu bazlı sipariş hesabı için hazır alan.
+                Zemin ve duvar seramiği metrajı, fire oranları, kutu bazlı siparişler, derz dolgusu, yapıştırıcı ve maliyet hesaplarını yönetin.
               </p>
               <div className="mt-5 flex items-center justify-between">
-                <span className="rounded-full bg-stone-200 px-3 py-1 text-xs font-semibold text-stone-600">Yakında</span>
-                <span className="text-sm font-semibold text-stone-500">Aktif değil</span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Hazır</span>
+                <span className="text-sm font-semibold text-amber-700 group-hover:text-amber-800">
+                  Alt modüle git
+                </span>
               </div>
-            </div>
+            </button>
 
             <div className="rounded-[28px] border border-dashed border-stone-300 bg-stone-50/70 p-6">
               <div className="inline-flex rounded-full bg-stone-200 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-stone-600">

@@ -168,6 +168,47 @@ function create3DTree() {
   return tree
 }
 
+function create3DCar(color: number) {
+  const car = new THREE.Group()
+
+  // Body
+  const bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 3.2)
+  const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.15, metalness: 0.8 })
+  const body = new THREE.Mesh(bodyGeo, bodyMat)
+  body.position.y = 0.4
+  body.castShadow = true
+  body.receiveShadow = true
+  car.add(body)
+
+  // Cabin
+  const cabinGeo = new THREE.BoxGeometry(1.4, 0.5, 1.8)
+  const cabinMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.1, metalness: 0.9 })
+  const cabin = new THREE.Mesh(cabinGeo, cabinMat)
+  cabin.position.set(0, 0.85, -0.2)
+  cabin.castShadow = true
+  car.add(cabin)
+
+  // Wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.3, 12)
+  wheelGeo.rotateZ(Math.PI / 2)
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 })
+  
+  const wPositions = [
+    { x: 0.85, y: 0.3, z: 0.9 },
+    { x: -0.85, y: 0.3, z: 0.9 },
+    { x: 0.85, y: 0.3, z: -0.9 },
+    { x: -0.85, y: 0.3, z: -0.9 }
+  ]
+  wPositions.forEach((pos) => {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat)
+    wheel.position.set(pos.x, pos.y, pos.z)
+    wheel.castShadow = true
+    car.add(wheel)
+  })
+
+  return car
+}
+
 export default function ThreeDViewPage() {
   const router = useRouter()
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -334,22 +375,62 @@ export default function ThreeDViewPage() {
     gridHelper.position.y = -1.5
     scene.add(gridHelper)
 
-    // Stage Compass & Facade Sprites on ground
-    const compassNorth = createTextSprite('KUZEY (YOL TARAFI)', '#ef4444', 20)
-    compassNorth.position.set(0, -0.9, -52)
-    scene.add(compassNorth)
+    // --- 3D COMPASS DIAL (Pusula Kadranı) ---
+    // Outer Dial Ring
+    const compassRingGeo = new THREE.RingGeometry(6, 6.2, 32)
+    const compassRingMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8, side: THREE.DoubleSide })
+    const compassRing = new THREE.Mesh(compassRingGeo, compassRingMat)
+    compassRing.rotation.x = Math.PI / 2
+    compassRing.position.set(0, -1.4, 0)
+    scene.add(compassRing)
 
-    const compassSouth = createTextSprite('GÜNEY (BİNA GİRİŞLERİ)', '#10b981', 22)
-    compassSouth.position.set(0, -0.9, 52)
-    scene.add(compassSouth)
+    // North Pointer Arrow (Red)
+    const arrowGeo = new THREE.ConeGeometry(0.5, 2, 4)
+    arrowGeo.rotateX(Math.PI / 2)
+    const nArrowMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5 })
+    const nArrow = new THREE.Mesh(arrowGeo, nArrowMat)
+    nArrow.position.set(0, -1.35, -1.8) // Points North (-Z)
+    scene.add(nArrow)
 
-    const compassWest = createTextSprite('BATI (PETROL OFİSİ)', '#94a3b8', 20)
-    compassWest.position.set(-52, -0.9, 0)
-    scene.add(compassWest)
+    // South Pointer Arrow (Grey)
+    const sArrow = new THREE.Mesh(arrowGeo, new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5 }))
+    sArrow.position.set(0, -1.35, 1.8) // Points South (+Z)
+    sArrow.rotation.y = Math.PI
+    scene.add(sArrow)
 
-    const compassEast = createTextSprite('DOĞU (BOTANICA TARAFI)', '#94a3b8', 20)
-    compassEast.position.set(52, -0.9, 0)
-    scene.add(compassEast)
+    // Compass Direction Letters inside courtyard
+    const labelK = createTextSprite('K', '#ef4444', 8)
+    labelK.position.set(0, -0.6, -4.5)
+    scene.add(labelK)
+
+    const labelG = createTextSprite('G', '#10b981', 8)
+    labelG.position.set(0, -0.6, 4.5)
+    scene.add(labelG)
+
+    const labelD = createTextSprite('D', '#38bdf8', 8)
+    labelD.position.set(4.5, -0.6, 0)
+    scene.add(labelD)
+
+    const labelB = createTextSprite('B', '#38bdf8', 8)
+    labelB.position.set(-4.5, -0.6, 0)
+    scene.add(labelB)
+
+    // --- FLOATING CEPEHE / FACADE LABELS (Havada duran cephe etiketleri) ---
+    const facadeNorth = createTextSprite('KUZEY CEPHESİ (YOL TARAFI)', '#f43f5e', 26)
+    facadeNorth.position.set(0, 10, -48)
+    scene.add(facadeNorth)
+
+    const facadeSouth = createTextSprite('GÜNEY CEPHESİ (GİRİŞ KAPILARI)', '#10b981', 28)
+    facadeSouth.position.set(0, 10, 48)
+    scene.add(facadeSouth)
+
+    const facadeWest = createTextSprite('BATI CEPHESİ (PETROL OFİSİ TARAFI)', '#38bdf8', 28)
+    facadeWest.position.set(-52, 10, 0)
+    scene.add(facadeWest)
+
+    const facadeEast = createTextSprite('DOĞU CEPHESİ (BOTANICA TARAFI)', '#38bdf8', 28)
+    facadeEast.position.set(52, 10, 0)
+    scene.add(facadeEast)
 
     // --- LANDSCAPING (Yeşil Alanlar / Çim) ---
     const yardGeo = new THREE.BoxGeometry(34, 0.1, 26)
@@ -404,10 +485,42 @@ export default function ThreeDViewPage() {
     borderLabel.position.set(-45, 0.2, -38)
     scene.add(borderLabel)
 
+    // --- SITE MAIN ENTRANCE (Site Ana Girişi - Batı Cephesi) ---
+    // Security booth (X=-44, Z=2)
+    const boothGeo = new THREE.BoxGeometry(2, 2.2, 2)
+    const boothMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.1 })
+    const booth = new THREE.Mesh(boothGeo, boothMat)
+    booth.position.set(-43.8, -0.4, 2)
+    booth.castShadow = true
+    booth.receiveShadow = true
+    scene.add(booth)
+    
+    const boothRoofGeo = new THREE.BoxGeometry(2.4, 0.2, 2.4)
+    const boothRoof = new THREE.Mesh(boothRoofGeo, new THREE.MeshStandardMaterial({ color: 0x475569 }))
+    boothRoof.position.set(-43.8, 0.8, 2)
+    boothRoof.castShadow = true
+    scene.add(boothRoof)
+
+    // Barrier Gate
+    const barrierPostGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8)
+    const barrierPost = new THREE.Mesh(barrierPostGeo, new THREE.MeshStandardMaterial({ color: 0x334155 }))
+    barrierPost.position.set(-43.8, -0.9, 0)
+    scene.add(barrierPost)
+
+    const barrierArmGeo = new THREE.BoxGeometry(0.1, 0.15, 3.2)
+    const barrierArm = new THREE.Mesh(barrierArmGeo, new THREE.MeshStandardMaterial({ color: 0xef4444 })) // Red barrier arm
+    barrierArm.position.set(-43.8, -0.2, -1.6)
+    scene.add(barrierArm)
+
+    // Floating Gate Label
+    const gateLabel = createTextSprite('SİTE ANA GİRİŞİ (BATI CEPHESİ)', '#10b981', 18)
+    gateLabel.position.set(-43.8, 2.6, 0)
+    scene.add(gateLabel)
+
     // --- 3D TREES ---
     const treePositions = [
-      { x: -5, z: -5 }, { x: 5, z: -5 }, { x: -5, z: 5 }, { x: 5, z: 5 },
-      { x: -41, z: -25 }, { x: -41, z: 0 }, { x: -41, z: 25 },
+      { x: -6, z: -8 }, { x: 6, z: -8 }, { x: -6, z: 8 }, { x: 6, z: 8 },
+      { x: -41, z: -25 }, { x: -41, z: 25 },
       { x: 41, z: -25 }, { x: 41, z: 0 }, { x: 41, z: 25 }
     ]
 
@@ -415,6 +528,46 @@ export default function ThreeDViewPage() {
       const tree = create3DTree()
       tree.position.set(pos.x, -1.4, pos.z)
       scene.add(tree)
+    })
+
+    // --- OTOPARK & ARABALAR (Parking lots in non-green areas) ---
+    // Draw white parking slot lines
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 })
+    const lineGeo = new THREE.BoxGeometry(0.15, 0.02, 4.0)
+
+    // West driveway otopark slots
+    const westSlotsZ = [-12, -8, -4, 4, 8, 12]
+    westSlotsZ.forEach((z) => {
+      const pLine = new THREE.Mesh(lineGeo, lineMat)
+      pLine.position.set(-30, -1.48, z)
+      scene.add(pLine)
+
+      // Spawn some random cars
+      if (Math.random() > 0.3) {
+        const colors = [0xef4444, 0x3b82f6, 0x64748b, 0xffffff, 0x111827]
+        const carColor = colors[Math.floor(Math.random() * colors.length)]
+        const car = create3DCar(carColor)
+        car.position.set(-32, -1.4, z)
+        car.rotation.y = Math.PI / 2
+        scene.add(car)
+      }
+    })
+
+    // East driveway otopark slots
+    const eastSlotsZ = [-12, -8, -4, 4, 8, 12]
+    eastSlotsZ.forEach((z) => {
+      const pLine = new THREE.Mesh(lineGeo, lineMat)
+      pLine.position.set(30, -1.48, z)
+      scene.add(pLine)
+
+      if (Math.random() > 0.3) {
+        const colors = [0xef4444, 0x3b82f6, 0x64748b, 0xffffff, 0x111827]
+        const carColor = colors[Math.floor(Math.random() * colors.length)]
+        const car = create3DCar(carColor)
+        car.position.set(32, -1.4, z)
+        car.rotation.y = -Math.PI / 2
+        scene.add(car)
+      }
     })
 
     // Render Blocks
@@ -456,6 +609,9 @@ export default function ThreeDViewPage() {
         if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
 
         const center = blockCenters[block]
+        // col=2, row=2 -> local position:
+        // Col 2: X_local = (2 - 2) * 3.0 = 0
+        // Row 2: Z_local = (2 - 1) * 3.0 = 3.0
         const entX = center.x
         const entZ = center.z + 3.0
         const entY = 1 * 2.4 - 1.2

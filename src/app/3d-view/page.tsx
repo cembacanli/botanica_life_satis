@@ -620,7 +620,117 @@ export default function ThreeDViewPage() {
       }
     })
 
-    // Render Blocks
+    // --- KUZEY YOLU (North Road Surface) ---
+    const northRoadGeo = new THREE.BoxGeometry(160, 0.12, 22)
+    const northRoadMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.95, metalness: 0.05 })
+    const northRoad = new THREE.Mesh(northRoadGeo, northRoadMat)
+    northRoad.position.set(0, -1.47, -49)
+    northRoad.receiveShadow = true
+    scene.add(northRoad)
+
+    // Road center lines (dashed yellow)
+    for (let rx = -70; rx < 70; rx += 8) {
+      const dashGeo = new THREE.BoxGeometry(4, 0.02, 0.3)
+      const dashMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.7 })
+      const dash = new THREE.Mesh(dashGeo, dashMat)
+      dash.position.set(rx, -1.41, -49)
+      scene.add(dash)
+    }
+    // Road edge lines (white)
+    const roadEdgeGeo = new THREE.BoxGeometry(160, 0.02, 0.2)
+    const roadEdgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+    const roadEdgeN = new THREE.Mesh(roadEdgeGeo, roadEdgeMat)
+    roadEdgeN.position.set(0, -1.41, -40)
+    scene.add(roadEdgeN)
+    const roadEdgeS = new THREE.Mesh(roadEdgeGeo, roadEdgeMat)
+    roadEdgeS.position.set(0, -1.41, -58)
+    scene.add(roadEdgeS)
+
+    // Yol yazısı
+    const roadLabel = createTextSprite('KUZEY (YOL)', '#fbbf24', 14)
+    roadLabel.position.set(0, 0, -49)
+    scene.add(roadLabel)
+
+    // --- PETROL OFİSİ (West facade) ---
+    const petrolMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.5 })
+    const petrolBodyGeo = new THREE.BoxGeometry(18, 6, 20)
+    const petrolBody = new THREE.Mesh(petrolBodyGeo, petrolMat)
+    petrolBody.position.set(-65, 1.5, 0)
+    petrolBody.castShadow = true
+    petrolBody.receiveShadow = true
+    scene.add(petrolBody)
+
+    // Petrol Ofisi canopy (çatı - geniş saçak)
+    const canopyGeo = new THREE.BoxGeometry(30, 0.5, 14)
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.7 })
+    const canopy = new THREE.Mesh(canopyGeo, canopyMat)
+    canopy.position.set(-65, 5, 0)
+    canopy.castShadow = true
+    scene.add(canopy)
+
+    // Petrol Ofisi canopy support pillars
+    ;[-10, 10].forEach(z => {
+      const pillarGeo = new THREE.CylinderGeometry(0.4, 0.4, 6, 8)
+      const pillar = new THREE.Mesh(pillarGeo, new THREE.MeshStandardMaterial({ color: 0x78350f }))
+      pillar.position.set(-67, 2, z)
+      pillar.castShadow = true
+      scene.add(pillar)
+    })
+
+    // Petrol Ofisi logo sign
+    const petrolLabel = createTextSprite('PETROl OFİSİ', '#fef9c3', 14)
+    petrolLabel.position.set(-65, 8, 0)
+    scene.add(petrolLabel)
+
+    // Petrol pump stands (2 adet)
+    ;[-4, 4].forEach(z => {
+      const pumpGeo = new THREE.BoxGeometry(1.2, 3, 0.6)
+      const pump = new THREE.Mesh(pumpGeo, new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.5 }))
+      pump.position.set(-57, 0, z)
+      pump.castShadow = true
+      scene.add(pump)
+    })
+
+    // --- BOTANİCA BİNASI (East facade - 10-story neighboring building) ---
+    const botanicaMat = new THREE.MeshStandardMaterial({ color: 0x1e40af, roughness: 0.15, metalness: 0.45, transparent: true, opacity: 0.88 })
+    const botanicaGeo = new THREE.BoxGeometry(24, 24, 30)
+    const botanicaBuilding = new THREE.Mesh(botanicaGeo, botanicaMat)
+    botanicaBuilding.position.set(70, 10.5, 0)
+    botanicaBuilding.castShadow = true
+    botanicaBuilding.receiveShadow = true
+    scene.add(botanicaBuilding)
+
+    // Botanica window grid
+    const winMat = new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.05, metalness: 0.95, transparent: true, opacity: 0.7, emissive: new THREE.Color(0x1d4ed8), emissiveIntensity: 0.2 })
+    for (let floor = 0; floor < 10; floor++) {
+      for (let col = 0; col < 4; col++) {
+        const winGeo = new THREE.BoxGeometry(0.2, 1.4, 3)
+        const win = new THREE.Mesh(winGeo, winMat)
+        win.position.set(58.1, floor * 2.4 + 0.8, col * 5 - 7.5)
+        scene.add(win)
+      }
+    }
+
+    // Botanica building edge lines
+    const botEdges = new THREE.EdgesGeometry(botanicaGeo)
+    const botLine = new THREE.LineSegments(botEdges, new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.3 }))
+    botanicaBuilding.add(botLine)
+
+    // Botanica label
+    const botanicaLabel = createTextSprite('BOTANİCA', '#93c5fd', 14)
+    botanicaLabel.position.set(70, 23.5, 0)
+    scene.add(botanicaLabel)
+
+    // Floor level lines on Botanica
+    for (let f = 0; f <= 10; f++) {
+      const floorLineGeo = new THREE.BoxGeometry(0.12, 0.12, 30)
+      const floorLineMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.25 })
+      const floorLine = new THREE.Mesh(floorLineGeo, floorLineMat)
+      floorLine.position.set(58, f * 2.4 - 0.8, 0)
+      scene.add(floorLine)
+    }
+
+
     const meshesMap = new Map<string, THREE.Mesh>()
     meshesRef.current = meshesMap
 

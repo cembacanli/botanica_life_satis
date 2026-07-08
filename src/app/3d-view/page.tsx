@@ -39,19 +39,21 @@ function getCDGridCoords(number: number, floor: number) {
   const k = number - startNum
 
   if (floor === 1) {
-    if (k === 0) return { col: 1, row: 0 }
-    if (k === 1) return { col: 2, row: 0 }
-    if (k === 2) return { col: 3, row: 0 }
-    if (k === 3) return { col: 4, row: 0 }
-    if (k === 4) return { col: 4, row: 1 }
-    if (k === 5) return { col: 4, row: 2 }
-    if (k === 6) return { col: 3, row: 2 }
-    if (k === 7) return { col: 2, row: 2 }
-    if (k === 8) return { col: 1, row: 2 }
-    if (k === 9) return { col: 0, row: 1 }
-    if (k === 10) return { col: 0, row: 0 }
-    return { col: 0, row: 2 }
+    // Floor 1 has 11 units. k goes 0..10. Slot (col=2, row=2) is empty for Building Entrance (bottom-middle).
+    if (k === 0) return { col: 1, row: 0 } // number 1
+    if (k === 1) return { col: 2, row: 0 } // number 2
+    if (k === 2) return { col: 3, row: 0 } // number 3
+    if (k === 3) return { col: 4, row: 0 } // number 4
+    if (k === 4) return { col: 4, row: 1 } // number 5
+    if (k === 5) return { col: 4, row: 2 } // number 6 (bottom-right)
+    if (k === 6) return { col: 3, row: 2 } // number 7
+    if (k === 7) return { col: 1, row: 2 } // number 8 (skips col=2 row=2 which is the entrance!)
+    if (k === 8) return { col: 0, row: 2 } // number 9 (bottom-left)
+    if (k === 9) return { col: 0, row: 1 } // number 10
+    if (k === 10) return { col: 0, row: 0 } // number 11
+    return { col: 2, row: 2 }
   } else {
+    // Floors 2-10 have 12 units. k goes 0..11.
     if (k === 0) return { col: 1, row: 0 }
     if (k === 1) return { col: 2, row: 0 }
     if (k === 2) return { col: 3, row: 0 }
@@ -352,7 +354,7 @@ export default function ThreeDViewPage() {
     // 1. Central Courtyard Grass Lawn Plane
     const yardGeo = new THREE.BoxGeometry(34, 0.1, 26)
     const yardMat = new THREE.MeshStandardMaterial({
-      color: 0x1b4d3e, // Forest Green
+      color: 0x1b4d3e,
       roughness: 0.9,
       metalness: 0.05
     })
@@ -390,7 +392,6 @@ export default function ThreeDViewPage() {
     scene.add(southLawn)
 
     // --- PARCEL BOUNDARY (Parsel Sınırı) ---
-    // Drawing a glowing neon-purple border path around the project parcel
     const boundaryPoints = [
       new THREE.Vector3(-45, -1.35, -38),
       new THREE.Vector3(45, -1.35, -38),
@@ -407,14 +408,10 @@ export default function ThreeDViewPage() {
     borderLabel.position.set(-45, 0.2, -38)
     scene.add(borderLabel)
 
-    // --- 3D TREES (Peyzaj Ağaçları) ---
-    // Add trees inside the courtyard and along the grass borders
+    // --- 3D TREES ---
     const treePositions = [
-      // Courtyard trees
       { x: -5, z: -5 }, { x: 5, z: -5 }, { x: -5, z: 5 }, { x: 5, z: 5 },
-      // West border trees
       { x: -41, z: -25 }, { x: -41, z: 0 }, { x: -41, z: 25 },
-      // East border trees
       { x: 41, z: -25 }, { x: 41, z: 0 }, { x: 41, z: 25 }
     ]
 
@@ -433,7 +430,7 @@ export default function ThreeDViewPage() {
       meshesMap.forEach((mesh) => scene.remove(mesh))
       meshesMap.clear()
 
-      // Define block offset centers (A-B north, C-D south)
+      // Define block offset centers
       const blockCenters = {
         B: { x: -24, z: -20 },
         A: { x: 24, z: -20 },
@@ -441,28 +438,53 @@ export default function ThreeDViewPage() {
         C: { x: 24, z: 20 }
       }
 
+      // Add floating block name cards on top of each block in 3D
+      const blockNames = {
+        B: 'B BLOK (2+1)',
+        A: 'A BLOK (2+1)',
+        D: 'D BLOK (1+1)',
+        C: 'C BLOK (1+1)'
+      }
+      for (const [block, name] of Object.entries(blockNames)) {
+        if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
+        const center = blockCenters[block as 'A' | 'B' | 'C' | 'D']
+        const nameSprite = createTextSprite(name, '#c084fc', 20)
+        nameSprite.position.set(center.x, 27, center.z)
+        scene.add(nameSprite)
+        meshesMap.set(`name-label-${block}`, nameSprite as any)
+      }
+
       // Add visual "Bina Girişi" labels & portals for C and D blocks on Floor 1
+      // Placed exactly at col=2, row=2 (bottom-middle gap in 1. KAT layout)
       for (const block of ['C', 'D'] as const) {
         if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
 
         const center = blockCenters[block]
-        const entX = center.x - 6.0
+        // col=2, row=2 -> local position:
+        // Col 2: X_local = (2 - 2) * 3.0 = 0
+        // Row 2: Z_local = (2 - 1) * 3.0 = 3.0
+        const entX = center.x
         const entZ = center.z + 3.0
         const entY = 1 * 2.4 - 1.2
 
-        // Render entrance lobby block in gray
+        // Render entrance lobby block in dark slate
         const entGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4)
         const entMat = new THREE.MeshStandardMaterial({
-          color: 0x334155,
-          roughness: 0.8,
-          metalness: 0.15,
+          color: 0x1e293b,
+          roughness: 0.75,
+          metalness: 0.2,
           transparent: true,
-          opacity: 0.85
+          opacity: 0.9
         })
         const entMesh = new THREE.Mesh(entGeo, entMat)
         entMesh.position.set(entX, entY, entZ)
         scene.add(entMesh)
         meshesMap.set(`entrance-${block}`, entMesh)
+
+        // Architectural door outline
+        const entEdges = new THREE.EdgesGeometry(entGeo)
+        const entLine = new THREE.LineSegments(entEdges, new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 }))
+        entMesh.add(entLine)
 
         // Floating label
         const entSprite = createTextSprite('BİNA GİRİŞİ', '#10b981', 8)

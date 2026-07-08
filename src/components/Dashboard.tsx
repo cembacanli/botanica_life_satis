@@ -174,12 +174,13 @@ export default function Dashboard() {
     apt => !soldApartmentIds.has(apt.id) && !landOwnerApartmentIds.has(apt.id) && !barterApartmentIds.has(apt.id)
   )
   const potentialAmount = potentialApartments.reduce((sum, apt) => sum + (apt.price || 0), 0)
-  const soldTotalAmount = soldWithoutLandOwnerRecords
+  const totalSoldIncludingBarterAmount = salesRecords
+    .filter((rec: any) => rec.saleType === 'sold' && !landOwnerApartmentIds.has(rec.apartmentId))
     .reduce((sum: number, rec: any) => {
       const saleData = saleDetailsMap[rec.apartmentId] || {}
       return sum + (saleData.salePrice || 0)
     }, 0)
-  const projectTotalSalePrice = soldTotalAmount + potentialAmount
+  const projectTotalSalePrice = totalSoldIncludingBarterAmount + potentialAmount
   const totalDepositAmount = salesRecords
     .filter((rec: any) => rec.saleType === 'sold' && !barterApartmentIds.has(rec.apartmentId))
     .reduce((sum: number, rec: any) => {

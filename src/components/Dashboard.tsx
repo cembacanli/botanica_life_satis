@@ -168,10 +168,10 @@ export default function Dashboard() {
       .map((rec: any) => rec.apartmentId)
   )
   const soldWithoutLandOwnerRecords = salesRecords.filter(
-    (rec: any) => rec.saleType === 'sold' && !landOwnerApartmentIds.has(rec.apartmentId)
+    (rec: any) => rec.saleType === 'sold' && !landOwnerApartmentIds.has(rec.apartmentId) && !barterApartmentIds.has(rec.apartmentId)
   )
   const potentialApartments = apartments.filter(
-    apt => !soldApartmentIds.has(apt.id) && !landOwnerApartmentIds.has(apt.id)
+    apt => !soldApartmentIds.has(apt.id) && !landOwnerApartmentIds.has(apt.id) && !barterApartmentIds.has(apt.id)
   )
   const potentialAmount = potentialApartments.reduce((sum, apt) => sum + (apt.price || 0), 0)
   const soldTotalAmount = soldWithoutLandOwnerRecords
@@ -468,30 +468,26 @@ export default function Dashboard() {
               })
               const soldIdsInBlock = new Set(blockSales.map((rec: any) => rec.apartmentId))
               const unsoldAptsInBlock = blockApts.filter(
-                (apt: any) => !soldIdsInBlock.has(apt.id) && !blockLandOwnerIds.has(apt.id)
+                (apt: any) => !soldIdsInBlock.has(apt.id) && !blockLandOwnerIds.has(apt.id) && !barterApartmentIds.has(apt.id)
               )
               const blockPotential = blockApts.reduce((sum: number, apt: any) => {
-                if (soldIdsInBlock.has(apt.id) || blockLandOwnerIds.has(apt.id)) return sum
+                if (soldIdsInBlock.has(apt.id) || blockLandOwnerIds.has(apt.id) || barterApartmentIds.has(apt.id)) return sum
                 return sum + (apt.price || 0)
               }, 0)
               const blockAverageSalePrice = unsoldAptsInBlock.length > 0
                 ? blockPotential / unsoldAptsInBlock.length
                 : 0
 
-              const totalRevenue = blockSales
-                .filter((rec: any) => !barterApartmentIds.has(rec.apartmentId))
-                .reduce((sum: number, rec: any) => {
-                  const saleData = saleDetailsMap[rec.apartmentId] || {}
-                  return sum + (saleData.salePrice || 0)
-                }, 0)
+              const totalRevenue = blockSales.reduce((sum: number, rec: any) => {
+                const saleData = saleDetailsMap[rec.apartmentId] || {}
+                return sum + (saleData.salePrice || 0)
+              }, 0)
 
-              const totalDeposit = blockSales
-                .filter((rec: any) => !barterApartmentIds.has(rec.apartmentId))
-                .reduce((sum: number, rec: any) => {
-                  const saleData = saleDetailsMap[rec.apartmentId] || {}
-                  const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
-                  return sum + (saleData.depositAmount || 0) + payments
-                }, 0)
+              const totalDeposit = blockSales.reduce((sum: number, rec: any) => {
+                const saleData = saleDetailsMap[rec.apartmentId] || {}
+                const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+                return sum + (saleData.depositAmount || 0) + payments
+              }, 0)
 
               const remainingApts = unsoldAptsInBlock.length
 

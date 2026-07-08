@@ -769,17 +769,21 @@ export default function ThreeDViewPage() {
 
         const mesh = intersect.object as THREE.Mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
-        mat.emissive.setHex(0x3c3c3c)
+        if (mat && mat.emissive) {
+          mat.emissive.setHex(0x3c3c3c)
+        }
 
         meshesMap.forEach((m) => {
-          if (m !== mesh) {
-            ;(m.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000)
+          if (m !== mesh && m.material && (m.material as any).emissive) {
+            ;(m.material as any).emissive.setHex(0x000000)
           }
         })
       } else {
         setHoveredApartment(null)
         meshesMap.forEach((m) => {
-          ;(m.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000)
+          if (m.material && (m.material as any).emissive) {
+            ;(m.material as any).emissive.setHex(0x000000)
+          }
         })
       }
     }

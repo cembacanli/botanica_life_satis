@@ -156,12 +156,18 @@ export async function GET(request: Request) {
         const customerName = formatCustomerName(String(sale.customer_name || '').trim()) || '-'
         const { firstName, lastName } = splitCustomerName(customerName)
 
+        // Müşteri adında "BARTER" geçiyorsa sale_type barter olarak işaretlenir
+        // (Bazı barter satışlar veritabanında sale_type='sold' olarak kayıtlı olabiliyor)
+        const rawSaleType = (sale.sale_type || 'reservation') as SaleType
+        const isNameBarter = /barter/i.test(String(sale.customer_name || ''))
+        const effectiveSaleType: SaleType = isNameBarter ? 'barter' : rawSaleType
+
         return {
           apartmentId,
           block: String(apartment?.block || '?'),
           floor: toNumber(apartment?.floor),
           number: toNumber(apartment?.number),
-          saleType: (sale.sale_type || 'reservation') as SaleType,
+          saleType: effectiveSaleType,
           customerName,
           customerFirstName: firstName,
           customerLastName: lastName,

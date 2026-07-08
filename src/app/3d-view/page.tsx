@@ -691,45 +691,75 @@ export default function ThreeDViewPage() {
       scene.add(pump)
     })
 
-    // --- BOTANİCA BİNASI (East facade - 10-story neighboring building) ---
-    const botanicaMat = new THREE.MeshStandardMaterial({ color: 0x1e40af, roughness: 0.15, metalness: 0.45, transparent: true, opacity: 0.88 })
-    const botanicaGeo = new THREE.BoxGeometry(24, 24, 30)
-    const botanicaBuilding = new THREE.Mesh(botanicaGeo, botanicaMat)
-    botanicaBuilding.position.set(70, 10.5, 0)
-    botanicaBuilding.castShadow = true
-    botanicaBuilding.receiveShadow = true
-    scene.add(botanicaBuilding)
+    // --- BOTANİCA KOMPLEKSİ (East facade - 7 blocks, 18x18x30m each, similar layout to user's site) ---
+    const botMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.12,
+      metalness: 0.55,
+      transparent: true,
+      opacity: 0.90
+    })
+    const botWinMat = new THREE.MeshStandardMaterial({
+      color: 0x93c5fd,
+      roughness: 0.05,
+      metalness: 0.95,
+      transparent: true,
+      opacity: 0.65,
+      emissive: new THREE.Color(0x1d4ed8),
+      emissiveIntensity: 0.18
+    })
 
-    // Botanica window grid
-    const winMat = new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.05, metalness: 0.95, transparent: true, opacity: 0.7, emissive: new THREE.Color(0x1d4ed8), emissiveIntensity: 0.2 })
-    for (let floor = 0; floor < 10; floor++) {
-      for (let col = 0; col < 4; col++) {
-        const winGeo = new THREE.BoxGeometry(0.2, 1.4, 3)
-        const win = new THREE.Mesh(winGeo, winMat)
-        win.position.set(58.1, floor * 2.4 + 0.8, col * 5 - 7.5)
-        scene.add(win)
+    // 7 blok koordinatları — Site yerleşimine benzer grid (3 üst sıra + 4 alt sıra)
+    // Origin: X=110 (bina sınırımızdan ~65 birim doğuda), Z merkez
+    const botBlocks = [
+      // Üst sıra (North) — 3 blok
+      { x: 102, z: -44 },
+      { x: 124, z: -44 },
+      { x: 146, z: -44 },
+      // Alt sıra (South) — 4 blok
+      { x: 91, z: -14 },
+      { x: 113, z: -14 },
+      { x: 135, z: -14 },
+      { x: 157, z: -14 },
+    ]
+
+    botBlocks.forEach((pos, i) => {
+      const bGeo = new THREE.BoxGeometry(18, 30, 18)
+      const bMesh = new THREE.Mesh(bGeo, botMat)
+      bMesh.position.set(pos.x, 13.5, pos.z)
+      bMesh.castShadow = true
+      bMesh.receiveShadow = true
+      scene.add(bMesh)
+
+      // Edge lines
+      const bEdges = new THREE.EdgesGeometry(bGeo)
+      const bLine = new THREE.LineSegments(bEdges, new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.28 }))
+      bMesh.add(bLine)
+
+      // Window grid (3 cols x 10 rows on the West-facing side)
+      for (let floor = 0; floor < 10; floor++) {
+        for (let col = 0; col < 3; col++) {
+          const wGeo = new THREE.BoxGeometry(0.18, 1.4, 3.2)
+          const win = new THREE.Mesh(wGeo, botWinMat)
+          win.position.set(pos.x - 9.1, floor * 2.9 + 0.5, pos.z + col * 5 - 5)
+          scene.add(win)
+        }
       }
-    }
 
-    // Botanica building edge lines
-    const botEdges = new THREE.EdgesGeometry(botanicaGeo)
-    const botLine = new THREE.LineSegments(botEdges, new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.3 }))
-    botanicaBuilding.add(botLine)
+      // Kat seviyesi yatay çizgiler
+      for (let f = 0; f <= 10; f++) {
+        const flGeo = new THREE.BoxGeometry(0.1, 0.1, 18)
+        const flMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.2 })
+        const flLine = new THREE.Mesh(flGeo, flMat)
+        flLine.position.set(pos.x - 9, f * 2.9, pos.z)
+        scene.add(flLine)
+      }
+    })
 
-    // Botanica label
-    const botanicaLabel = createTextSprite('BOTANİCA', '#93c5fd', 14)
-    botanicaLabel.position.set(70, 23.5, 0)
+    // "BOTANİCA KOMPLEKSİ" group label
+    const botanicaLabel = createTextSprite('BOTANİCA KOMPLEKSİ', '#93c5fd', 22)
+    botanicaLabel.position.set(124, 32, -29)
     scene.add(botanicaLabel)
-
-    // Floor level lines on Botanica
-    for (let f = 0; f <= 10; f++) {
-      const floorLineGeo = new THREE.BoxGeometry(0.12, 0.12, 30)
-      const floorLineMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.25 })
-      const floorLine = new THREE.Mesh(floorLineGeo, floorLineMat)
-      floorLine.position.set(58, f * 2.4 - 0.8, 0)
-      scene.add(floorLine)
-    }
-
 
     const meshesMap = new Map<string, THREE.Mesh>()
     meshesRef.current = meshesMap

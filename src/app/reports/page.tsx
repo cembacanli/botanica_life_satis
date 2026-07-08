@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-type SaleType = 'reservation' | 'deposit' | 'sold'
+type SaleType = 'reservation' | 'deposit' | 'sold' | 'barter' | 'landowner'
 
 interface ReportRow {
   apartmentId: string
@@ -76,22 +76,22 @@ function formatDate(value: string) {
 }
 
 function getSaleTypeBadge(type: SaleType) {
-  if (type === 'sold') {
-    return 'bg-emerald-100 text-emerald-700'
-  }
-
-  if (type === 'deposit') {
-    return 'bg-amber-100 text-amber-700'
-  }
-
+  if (type === 'sold') return 'bg-emerald-100 text-emerald-700'
+  if (type === 'deposit') return 'bg-amber-100 text-amber-700'
+  if (type === 'barter') return 'bg-blue-100 text-blue-700'
+  if (type === 'landowner') return 'bg-purple-100 text-purple-700'
   return 'bg-sky-100 text-sky-700'
 }
 
 function getSaleTypeLabel(type: SaleType) {
   if (type === 'sold') return 'Satış'
   if (type === 'deposit') return 'Kapora'
+  if (type === 'barter') return 'Barter (Takas)'
+  if (type === 'landowner') return 'Arsa Sahibi'
   return 'Rezervasyon'
 }
+
+const EXCLUDED_FROM_TOTALS: SaleType[] = ['barter', 'landowner']
 
 function getBlockAccent(block: string) {
   if (block === 'A') return 'from-sky-500 to-cyan-500'
@@ -263,11 +263,23 @@ export default function ReportsPage() {
                         <tr key={item.apartmentId} className="border-b border-slate-100 transition hover:bg-slate-50/80">
                           <td className="px-6 py-4 text-sm font-semibold text-slate-900">{item.floor}</td>
                           <td className="px-6 py-4 text-sm font-semibold text-slate-900">{item.number}</td>
-                          <td className="px-6 py-4 text-sm text-slate-700">{formatCurrency(item.salePrice)}</td>
+                        <td className="px-6 py-4 text-sm text-slate-700">
+                            {EXCLUDED_FROM_TOTALS.includes(item.saleType) ? (
+                              <span className="text-slate-400 italic text-xs">Toplama dahil değil</span>
+                            ) : formatCurrency(item.salePrice)}
+                          </td>
                           <td className="px-6 py-4 text-sm text-slate-700">{item.customerFirstName}</td>
                           <td className="px-6 py-4 text-sm text-slate-700">{item.customerLastName}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-emerald-700">{formatCurrency(item.totalPaid)}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-rose-700">{formatCurrency(item.remainingBalance)}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-emerald-700">
+                            {EXCLUDED_FROM_TOTALS.includes(item.saleType) ? (
+                              <span className="text-slate-400 italic text-xs">—</span>
+                            ) : formatCurrency(item.totalPaid)}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-rose-700">
+                            {EXCLUDED_FROM_TOTALS.includes(item.saleType) ? (
+                              <span className="text-slate-400 italic text-xs">—</span>
+                            ) : formatCurrency(item.remainingBalance)}
+                          </td>
                           <td className="px-6 py-4 text-sm">
                             <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getSaleTypeBadge(item.saleType)}`}>
                               {getSaleTypeLabel(item.saleType)}
@@ -278,6 +290,11 @@ export default function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
+                {blockReport.items.some(i => EXCLUDED_FROM_TOTALS.includes(i.saleType)) && (
+                  <div className="border-t border-slate-100 bg-blue-50/60 px-6 py-3 text-xs text-blue-700">
+                    ℹ️ <strong>Barter (Takas)</strong> ve <strong>Arsa Sahibi</strong> işlemleri bu bloğun finansal toplamlarına <strong>dahil edilmemiştir</strong>. Sütunlarda &ldquo;—&rdquo; ile gösterilmiştir.
+                  </div>
+                )}
               </section>
             ))}
 

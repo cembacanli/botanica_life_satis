@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { formatCustomerName } from '@/lib/customer-name'
 
-type SaleType = 'reservation' | 'deposit' | 'sold'
+type SaleType = 'reservation' | 'deposit' | 'sold' | 'barter' | 'landowner'
 
 interface ApartmentRow {
   id: string
@@ -174,10 +174,17 @@ export async function GET(request: Request) {
       })
       .filter((row): row is ReportRow => row !== null)
 
+    // Barter ve arsa sahibi işlemleri finansal tutarları etkilememelidir.
+    // Bunlar tabloda görüntülenir ancak satış tutarı toplamlarına dahil edilmez.
+    const EXCLUDED_FROM_TOTALS: SaleType[] = ['barter', 'landowner']
+
     const filteredRows = rows.filter(row => {
       if (blockFilter && row.block !== blockFilter) return false
-      return row.salePrice > 0 || row.totalPaid > 0 || row.remainingBalance > 0
+      return row.salePrice > 0 || row.totalPaid > 0 || row.remainingBalance > 0 || EXCLUDED_FROM_TOTALS.includes(row.saleType)
     })
+
+    // Finansal toplamlara dahil edilecek satırlar (barter ve arsa sahibi hariç)
+    const financialRows = filteredRows.filter(row => !EXCLUDED_FROM_TOTALS.includes(row.saleType))
 
     filteredRows.sort((a, b) => {
       if (a.block !== b.block) return getSortWeight(a.block) - getSortWeight(b.block)
@@ -191,12 +198,15 @@ export async function GET(request: Request) {
         const items = filteredRows.filter(row => row.block === block)
         if (items.length === 0) return null
 
+        // Finansal toplamlarda sadece gerçek satışlar (barter ve arsa sahibi hariç)
+        const financialItems = items.filter(item => !EXCLUDED_FROM_TOTALS.includes(item.saleType))
+
         return {
           block,
           totalCount: items.length,
-          totalSalePrice: items.reduce((sum, item) => sum + item.salePrice, 0),
-          totalPaid: items.reduce((sum, item) => sum + item.totalPaid, 0),
-          totalRemainingBalance: items.reduce((sum, item) => sum + item.remainingBalance, 0),
+          totalSalePrice: financialItems.reduce((sum, item) => sum + item.salePrice, 0),
+          totalPaid: financialItems.reduce((sum, item) => sum + item.totalPaid, 0),
+          totalRemainingBalance: financialItems.reduce((sum, item) => sum + item.remainingBalance, 0),
           items,
         }
       })
@@ -210,9 +220,10 @@ export async function GET(request: Request) {
       total: filteredRows.length,
       totals: {
         totalCount: filteredRows.length,
-        totalSalePrice: filteredRows.reduce((sum, item) => sum + item.salePrice, 0),
-        totalPaid: filteredRows.reduce((sum, item) => sum + item.totalPaid, 0),
-        totalRemainingBalance: filteredRows.reduce((sum, item) => sum + item.remainingBalance, 0),
+        // Barter ve arsa sahibi toplam satış tutarına dahil edilmez
+        totalSalePrice: financialRows.reduce((sum, item) => sum + item.salePrice, 0),
+        totalPaid: financialRows.reduce((sum, item) => sum + item.totalPaid, 0),
+        totalRemainingBalance: financialRows.reduce((sum, item) => sum + item.remainingBalance, 0),
       },
       blocks: blockEntries,
       activity,

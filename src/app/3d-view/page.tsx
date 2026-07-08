@@ -709,18 +709,19 @@ export default function ThreeDViewPage() {
       emissiveIntensity: 0.18
     })
 
-    // 7 blok koordinatları — Site yerleşimine benzer grid (3 üst sıra + 4 alt sıra)
-    // Origin: X=110 (bina sınırımızdan ~65 birim doğuda), Z merkez
+    // 7 blok koordinatları — A bloğu (z=-20) ve D bloğu (z=20) ile hizalı
+    // Kuzey sırası A bloğuyla (z=-20), güney sırası D bloğuyla (z=20) hizalı
+    // Parsel doğu sınırı X=45, bloklarımızdan yeterli uzaklıkla X=62'den başlıyoruz
     const botBlocks = [
-      // Üst sıra (North) — 3 blok
-      { x: 102, z: -44 },
-      { x: 124, z: -44 },
-      { x: 146, z: -44 },
-      // Alt sıra (South) — 4 blok
-      { x: 91, z: -14 },
-      { x: 113, z: -14 },
-      { x: 135, z: -14 },
-      { x: 157, z: -14 },
+      // Kuzey sırası — A blok (z=-20) ile hizalı — 4 blok
+      { x: 62,  z: -20 },
+      { x: 84,  z: -20 },
+      { x: 106, z: -20 },
+      { x: 128, z: -20 },
+      // Güney sırası — D blok (z=20) ile hizalı — 3 blok
+      { x: 62,  z: 20 },
+      { x: 84,  z: 20 },
+      { x: 106, z: 20 },
     ]
 
     botBlocks.forEach((pos, i) => {
@@ -756,9 +757,9 @@ export default function ThreeDViewPage() {
       }
     })
 
-    // "BOTANİCA KOMPLEKSİ" group label
+    // "BOTANİCA KOMPLEKSİ" group label — merkeze hizalı
     const botanicaLabel = createTextSprite('BOTANİCA KOMPLEKSİ', '#93c5fd', 22)
-    botanicaLabel.position.set(124, 32, -29)
+    botanicaLabel.position.set(95, 32, 0)
     scene.add(botanicaLabel)
 
     const meshesMap = new Map<string, THREE.Mesh>()

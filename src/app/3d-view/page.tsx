@@ -39,7 +39,6 @@ function getCDGridCoords(number: number, floor: number) {
   const k = number - startNum
 
   if (floor === 1) {
-    // Floor 1 has 11 units. k goes 0..10. Slot (col=2, row=2) is empty for Building Entrance (bottom-middle).
     if (k === 0) return { col: 1, row: 0 } // number 1
     if (k === 1) return { col: 2, row: 0 } // number 2
     if (k === 2) return { col: 3, row: 0 } // number 3
@@ -47,13 +46,12 @@ function getCDGridCoords(number: number, floor: number) {
     if (k === 4) return { col: 4, row: 1 } // number 5
     if (k === 5) return { col: 4, row: 2 } // number 6 (bottom-right)
     if (k === 6) return { col: 3, row: 2 } // number 7
-    if (k === 7) return { col: 1, row: 2 } // number 8 (skips col=2 row=2 which is the entrance!)
+    if (k === 7) return { col: 1, row: 2 } // number 8
     if (k === 8) return { col: 0, row: 2 } // number 9 (bottom-left)
     if (k === 9) return { col: 0, row: 1 } // number 10
     if (k === 10) return { col: 0, row: 0 } // number 11
     return { col: 2, row: 2 }
   } else {
-    // Floors 2-10 have 12 units. k goes 0..11.
     if (k === 0) return { col: 1, row: 0 }
     if (k === 1) return { col: 2, row: 0 }
     if (k === 2) return { col: 3, row: 0 }
@@ -71,7 +69,6 @@ function getCDGridCoords(number: number, floor: number) {
 }
 
 // Facade string builder based on grid position for C & D blocks
-// C is on West/Left (Petrol Ofisi side), D is on East/Right (Botanica side)
 function getCDFacadeDescription(number: number, floor: number, block: 'C' | 'D') {
   const { col, row } = getCDGridCoords(number, floor)
 
@@ -115,18 +112,59 @@ function getABFacadeDescription(number: number) {
   return 'Bahçe Cephesi'
 }
 
+// Crisp, high-contrast horizontal plane text label creator for ground layout
+function createGroundLabelMesh(text: string, color: string, width = 36, height = 9) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.clearRect(0, 0, 1024, 256)
+    
+    // Draw card background
+    ctx.fillStyle = 'rgba(9, 12, 22, 0.95)'
+    ctx.beginPath()
+    ctx.roundRect(10, 10, 1004, 236, 32)
+    ctx.fill()
+    
+    // Border stroke
+    ctx.lineWidth = 10
+    ctx.strokeStyle = color
+    ctx.stroke()
+    
+    // Text drawing (crisp and large)
+    ctx.font = 'Bold 64px Arial'
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, 512, 128)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.minFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
+
+  const geometry = new THREE.PlaneGeometry(width, height)
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide
+  })
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.rotation.x = -Math.PI / 2
+  return mesh
+}
+
 function createTextSprite(text: string, color: string, scale = 14) {
   const canvas = document.createElement('canvas')
   canvas.width = 512
   canvas.height = 128
   const ctx = canvas.getContext('2d')
   if (ctx) {
-    ctx.font = 'Bold 36px Arial'
+    ctx.font = 'Bold 42px Arial'
     ctx.fillStyle = color
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.clearRect(0, 0, 512, 128)
-    // Draw background label rounded card
     ctx.fillStyle = 'rgba(11, 15, 25, 0.9)'
     ctx.beginPath()
     ctx.roundRect(10, 10, 492, 108, 16)
@@ -134,7 +172,6 @@ function createTextSprite(text: string, color: string, scale = 14) {
     ctx.lineWidth = 2.5
     ctx.strokeStyle = color
     ctx.stroke()
-    // Text
     ctx.fillStyle = '#ffffff'
     ctx.fillText(text, 256, 64)
   }
@@ -147,7 +184,6 @@ function createTextSprite(text: string, color: string, scale = 14) {
 
 function create3DTree() {
   const tree = new THREE.Group()
-  // Trunk
   const trunkGeo = new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8)
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.9 })
   const trunk = new THREE.Mesh(trunkGeo, trunkMat)
@@ -156,7 +192,6 @@ function create3DTree() {
   trunk.receiveShadow = true
   tree.add(trunk)
 
-  // Foliage
   const foliageGeo = new THREE.DodecahedronGeometry(0.85, 1)
   const foliageMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.85 })
   const foliage = new THREE.Mesh(foliageGeo, foliageMat)
@@ -171,7 +206,6 @@ function create3DTree() {
 function create3DCar(color: number) {
   const car = new THREE.Group()
 
-  // Body
   const bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 3.2)
   const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.15, metalness: 0.8 })
   const body = new THREE.Mesh(bodyGeo, bodyMat)
@@ -180,7 +214,6 @@ function create3DCar(color: number) {
   body.receiveShadow = true
   car.add(body)
 
-  // Cabin
   const cabinGeo = new THREE.BoxGeometry(1.4, 0.5, 1.8)
   const cabinMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.1, metalness: 0.9 })
   const cabin = new THREE.Mesh(cabinGeo, cabinMat)
@@ -188,7 +221,6 @@ function create3DCar(color: number) {
   cabin.castShadow = true
   car.add(cabin)
 
-  // Wheels
   const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.3, 12)
   wheelGeo.rotateZ(Math.PI / 2)
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 })
@@ -225,6 +257,11 @@ export default function ThreeDViewPage() {
   const [selectedApartment, setSelectedApartment] = useState<Apartment | null>(null)
   const [hoveredApartment, setHoveredApartment] = useState<Apartment | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+
+  // Camera lerp animation refs
+  const targetCamPosRef = useRef<THREE.Vector3 | null>(null)
+  const targetLookAtRef = useRef<THREE.Vector3 | null>(null)
+  const isAnimatingCamRef = useRef(false)
 
   // Three.js instances refs for updates
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -278,13 +315,13 @@ export default function ThreeDViewPage() {
   const getApartmentColor = (apt: Apartment) => {
     const sale = saleRecordMap[apt.id]
     if (sale) {
-      if (sale.saleType === 'barter') return 0x3b82f6 // Blue
-      if (sale.saleType === 'landowner') return 0x8b5cf6 // Purple
-      if (sale.saleType === 'reservation') return 0xf59e0b // Yellow
-      if (sale.saleType === 'deposit') return 0xf97316 // Orange
-      return 0xef4444 // Red (sold)
+      if (sale.saleType === 'barter') return 0x3b82f6
+      if (sale.saleType === 'landowner') return 0x8b5cf6
+      if (sale.saleType === 'reservation') return 0xf59e0b
+      if (sale.saleType === 'deposit') return 0xf97316
+      return 0xef4444
     }
-    return 0x10b981 // Green (available)
+    return 0x10b981
   }
 
   const getStatusLabel = (apt: Apartment) => {
@@ -316,6 +353,13 @@ export default function ThreeDViewPage() {
       return getCDFacadeDescription(apt.number, apt.floor, apt.block)
     }
     return getABFacadeDescription(apt.number)
+  }
+
+  // Camera sweep animation trigger
+  const triggerCameraAnimation = (cam: { x: number, y: number, z: number }, target: { x: number, y: number, z: number }) => {
+    targetCamPosRef.current = new THREE.Vector3(cam.x, cam.y, cam.z)
+    targetLookAtRef.current = new THREE.Vector3(target.x, target.y, target.z)
+    isAnimatingCamRef.current = true
   }
 
   // Set up Three.js Scene
@@ -376,7 +420,6 @@ export default function ThreeDViewPage() {
     scene.add(gridHelper)
 
     // --- 3D COMPASS DIAL (Pusula Kadranı) ---
-    // Outer Dial Ring
     const compassRingGeo = new THREE.RingGeometry(6, 6.2, 32)
     const compassRingMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8, side: THREE.DoubleSide })
     const compassRing = new THREE.Mesh(compassRingGeo, compassRingMat)
@@ -384,21 +427,18 @@ export default function ThreeDViewPage() {
     compassRing.position.set(0, -1.4, 0)
     scene.add(compassRing)
 
-    // North Pointer Arrow (Red)
     const arrowGeo = new THREE.ConeGeometry(0.5, 2, 4)
     arrowGeo.rotateX(Math.PI / 2)
     const nArrowMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5 })
     const nArrow = new THREE.Mesh(arrowGeo, nArrowMat)
-    nArrow.position.set(0, -1.35, -1.8) // Points North (-Z)
+    nArrow.position.set(0, -1.35, -1.8)
     scene.add(nArrow)
 
-    // South Pointer Arrow (Grey)
     const sArrow = new THREE.Mesh(arrowGeo, new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5 }))
-    sArrow.position.set(0, -1.35, 1.8) // Points South (+Z)
+    sArrow.position.set(0, -1.35, 1.8)
     sArrow.rotation.y = Math.PI
     scene.add(sArrow)
 
-    // Compass Direction Letters inside courtyard
     const labelK = createTextSprite('K', '#ef4444', 8)
     labelK.position.set(0, -0.6, -4.5)
     scene.add(labelK)
@@ -415,24 +455,30 @@ export default function ThreeDViewPage() {
     labelB.position.set(-4.5, -0.6, 0)
     scene.add(labelB)
 
-    // --- FLOATING CEPEHE / FACADE LABELS (Havada duran cephe etiketleri) ---
-    const facadeNorth = createTextSprite('KUZEY CEPHESİ (YOL TARAFI)', '#f43f5e', 26)
-    facadeNorth.position.set(0, 10, -48)
-    scene.add(facadeNorth)
+    // --- HIGH-CONTRAST GROUND FACADE LABELS (Dışarıda, Zeminde yatan tabelalar) ---
+    // North Road Label
+    const groundFacadeNorth = createGroundLabelMesh('KUZEY CEPHESİ (YOL TARAFI)', '#f43f5e', 42, 10.5)
+    groundFacadeNorth.position.set(0, -1.43, -46)
+    scene.add(groundFacadeNorth)
 
-    const facadeSouth = createTextSprite('GÜNEY CEPHESİ (GİRİŞ KAPILARI)', '#10b981', 28)
-    facadeSouth.position.set(0, 10, 48)
-    scene.add(facadeSouth)
+    // South Road Label
+    const groundFacadeSouth = createGroundLabelMesh('GÜNEY CEPHESİ (GİRİŞ KAPILARI)', '#10b981', 44, 11)
+    groundFacadeSouth.position.set(0, -1.43, 46)
+    scene.add(groundFacadeSouth)
 
-    const facadeWest = createTextSprite('BATI CEPHESİ (PETROL OFİSİ TARAFI)', '#38bdf8', 28)
-    facadeWest.position.set(-52, 10, 0)
-    scene.add(facadeWest)
+    // West Side (Petrol Ofisi) Road Label
+    const groundFacadeWest = createGroundLabelMesh('BATI CEPHESİ (PETROL OFİSİ TARAFI)', '#38bdf8', 44, 11)
+    groundFacadeWest.position.set(-54, -1.43, 0)
+    groundFacadeWest.rotation.z = Math.PI / 2 // Rotate along West boundary Z-axis
+    scene.add(groundFacadeWest)
 
-    const facadeEast = createTextSprite('DOĞU CEPHESİ (BOTANICA TARAFI)', '#38bdf8', 28)
-    facadeEast.position.set(52, 10, 0)
-    scene.add(facadeEast)
+    // East Side (Botanica) Road Label
+    const groundFacadeEast = createGroundLabelMesh('DOĞU CEPHESİ (BOTANICA TARAFI)', '#38bdf8', 44, 11)
+    groundFacadeEast.position.set(54, -1.43, 0)
+    groundFacadeEast.rotation.z = -Math.PI / 2 // Rotate along East boundary Z-axis
+    scene.add(groundFacadeEast)
 
-    // --- LANDSCAPING (Yeşil Alanlar / Çim) ---
+    // --- LANDSCAPING ---
     const yardGeo = new THREE.BoxGeometry(34, 0.1, 26)
     const yardMat = new THREE.MeshStandardMaterial({
       color: 0x1b4d3e,
@@ -468,7 +514,7 @@ export default function ThreeDViewPage() {
     southLawn.receiveShadow = true
     scene.add(southLawn)
 
-    // --- PARCEL BOUNDARY (Parsel Sınırı) ---
+    // --- PARCEL BOUNDARY ---
     const boundaryPoints = [
       new THREE.Vector3(-45, -1.35, -38),
       new THREE.Vector3(45, -1.35, -38),
@@ -486,7 +532,6 @@ export default function ThreeDViewPage() {
     scene.add(borderLabel)
 
     // --- SITE MAIN ENTRANCE (Site Ana Girişi - Batı Cephesi) ---
-    // Security booth (X=-44, Z=2)
     const boothGeo = new THREE.BoxGeometry(2, 2.2, 2)
     const boothMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.2, metalness: 0.1 })
     const booth = new THREE.Mesh(boothGeo, boothMat)
@@ -501,18 +546,16 @@ export default function ThreeDViewPage() {
     boothRoof.castShadow = true
     scene.add(boothRoof)
 
-    // Barrier Gate
     const barrierPostGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8)
     const barrierPost = new THREE.Mesh(barrierPostGeo, new THREE.MeshStandardMaterial({ color: 0x334155 }))
     barrierPost.position.set(-43.8, -0.9, 0)
     scene.add(barrierPost)
 
     const barrierArmGeo = new THREE.BoxGeometry(0.1, 0.15, 3.2)
-    const barrierArm = new THREE.Mesh(barrierArmGeo, new THREE.MeshStandardMaterial({ color: 0xef4444 })) // Red barrier arm
+    const barrierArm = new THREE.Mesh(barrierArmGeo, new THREE.MeshStandardMaterial({ color: 0xef4444 }))
     barrierArm.position.set(-43.8, -0.2, -1.6)
     scene.add(barrierArm)
 
-    // Floating Gate Label
     const gateLabel = createTextSprite('SİTE ANA GİRİŞİ (BATI CEPHESİ)', '#10b981', 18)
     gateLabel.position.set(-43.8, 2.6, 0)
     scene.add(gateLabel)
@@ -530,19 +573,16 @@ export default function ThreeDViewPage() {
       scene.add(tree)
     })
 
-    // --- OTOPARK & ARABALAR (Parking lots in non-green areas) ---
-    // Draw white parking slot lines
+    // --- OTOPARK & ARABALAR ---
     const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 })
     const lineGeo = new THREE.BoxGeometry(0.15, 0.02, 4.0)
 
-    // West driveway otopark slots
     const westSlotsZ = [-12, -8, -4, 4, 8, 12]
     westSlotsZ.forEach((z) => {
       const pLine = new THREE.Mesh(lineGeo, lineMat)
       pLine.position.set(-30, -1.48, z)
       scene.add(pLine)
 
-      // Spawn some random cars
       if (Math.random() > 0.3) {
         const colors = [0xef4444, 0x3b82f6, 0x64748b, 0xffffff, 0x111827]
         const carColor = colors[Math.floor(Math.random() * colors.length)]
@@ -553,7 +593,6 @@ export default function ThreeDViewPage() {
       }
     })
 
-    // East driveway otopark slots
     const eastSlotsZ = [-12, -8, -4, 4, 8, 12]
     eastSlotsZ.forEach((z) => {
       const pLine = new THREE.Mesh(lineGeo, lineMat)
@@ -575,12 +614,9 @@ export default function ThreeDViewPage() {
     meshesRef.current = meshesMap
 
     const buildScene = () => {
-      // Clear previous meshes
       meshesMap.forEach((mesh) => scene.remove(mesh))
       meshesMap.clear()
 
-      // Define block offset centers
-      // Swapped: C block on West/Left (Petrol Ofisi side), D block on East/Right (Botanica side)
       const blockCenters = {
         B: { x: -24, z: -20 },
         A: { x: 24, z: -20 },
@@ -588,7 +624,6 @@ export default function ThreeDViewPage() {
         D: { x: 24, z: 20 }
       }
 
-      // Add floating block name cards on top of each block in 3D
       const blockNames = {
         B: 'B BLOK (2+1)',
         A: 'A BLOK (2+1)',
@@ -604,19 +639,14 @@ export default function ThreeDViewPage() {
         meshesMap.set(`name-label-${block}`, nameSprite as any)
       }
 
-      // Add visual "Bina Girişi" labels & portals for C and D blocks on Floor 1
       for (const block of ['C', 'D'] as const) {
         if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
 
         const center = blockCenters[block]
-        // col=2, row=2 -> local position:
-        // Col 2: X_local = (2 - 2) * 3.0 = 0
-        // Row 2: Z_local = (2 - 1) * 3.0 = 3.0
         const entX = center.x
         const entZ = center.z + 3.0
         const entY = 1 * 2.4 - 1.2
 
-        // Render entrance lobby block in dark slate
         const entGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4)
         const entMat = new THREE.MeshStandardMaterial({
           color: 0x1e293b,
@@ -630,12 +660,10 @@ export default function ThreeDViewPage() {
         scene.add(entMesh)
         meshesMap.set(`entrance-${block}`, entMesh)
 
-        // Architectural door outline
         const entEdges = new THREE.EdgesGeometry(entGeo)
         const entLine = new THREE.LineSegments(entEdges, new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 }))
         entMesh.add(entLine)
 
-        // Floating label
         const entSprite = createTextSprite('BİNA GİRİŞİ', '#10b981', 8)
         entSprite.position.set(entX, entY + 1.8, entZ)
         scene.add(entSprite)
@@ -643,7 +671,6 @@ export default function ThreeDViewPage() {
       }
 
       apartments.forEach((apt) => {
-        // Skip if not matches filter
         if (selectedBlock !== 'Tümü' && apt.block !== selectedBlock) return
 
         const center = blockCenters[apt.block]
@@ -701,7 +728,6 @@ export default function ThreeDViewPage() {
         meshesMap.set(apt.id, mesh)
       })
 
-      // Adjust camera focus target
       if (selectedBlock !== 'Tümü') {
         const center = blockCenters[selectedBlock]
         controls.target.set(center.x, 12, center.z)
@@ -723,8 +749,6 @@ export default function ThreeDViewPage() {
 
       raycaster.setFromCamera(mouse, camera)
       const intersects = raycaster.intersectObjects(scene.children)
-
-      // Find first apartment box intersected
       const intersect = intersects.find((i) => i.object.userData?.apartment)
 
       if (intersect) {
@@ -732,12 +756,10 @@ export default function ThreeDViewPage() {
         setHoveredApartment(apt)
         setTooltipPos({ x: event.clientX + 15, y: event.clientY + 15 })
 
-        // Highlight hovered mesh
         const mesh = intersect.object as THREE.Mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
         mat.emissive.setHex(0x3c3c3c)
 
-        // Reset other meshes' emissive
         meshesMap.forEach((m) => {
           if (m !== mesh) {
             ;(m.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000)
@@ -792,12 +814,22 @@ export default function ThreeDViewPage() {
     let animationFrameId = 0
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate)
+      
+      // Camera smooth animation lerping
+      if (isAnimatingCamRef.current && targetCamPosRef.current && targetLookAtRef.current) {
+        camera.position.lerp(targetCamPosRef.current, 0.07)
+        controls.target.lerp(targetLookAtRef.current, 0.07)
+        
+        if (camera.position.distanceTo(targetCamPosRef.current) < 0.1 && controls.target.distanceTo(targetLookAtRef.current) < 0.1) {
+          isAnimatingCamRef.current = false
+        }
+      }
+      
       controls.update()
       renderer.render(scene, camera)
     }
     animate()
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(animationFrameId)
       container.removeEventListener('mousemove', onPointerMove)
@@ -869,6 +901,25 @@ export default function ThreeDViewPage() {
               <p className="text-slate-300 text-sm">3D Modeller yükleniyor...</p>
             </div>
           ) : null}
+
+          {/* Facade Camera Quick buttons HUD */}
+          <div className="absolute top-4 left-4 z-20 bg-slate-950/80 border border-slate-800/80 p-2.5 rounded-2xl shadow-xl backdrop-blur-md flex flex-wrap gap-2 max-w-[calc(100%-2rem)]">
+            <span className="text-xs font-bold text-slate-400 self-center px-1.5 hidden md:inline">👁️ Hızlı Cephe Bakışı:</span>
+            {[
+              { name: 'Kuzey (Yol)', color: 'hover:bg-rose-500/20 border-rose-500/30 text-rose-300', cam: { x: 0, y: 25, z: -85 }, target: { x: 0, y: 8, z: 0 } },
+              { name: 'Güney (Girişler)', color: 'hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300', cam: { x: 0, y: 25, z: 85 }, target: { x: 0, y: 8, z: 0 } },
+              { name: 'Batı (Petrol Ofisi)', color: 'hover:bg-sky-500/20 border-sky-500/30 text-sky-300', cam: { x: -85, y: 25, z: 0 }, target: { x: 0, y: 8, z: 0 } },
+              { name: 'Doğu (Botanica)', color: 'hover:bg-cyan-500/20 border-cyan-500/30 text-cyan-300', cam: { x: 85, y: 25, z: 0 }, target: { x: 0, y: 8, z: 0 } },
+            ].map((facade) => (
+              <button
+                key={facade.name}
+                onClick={() => triggerCameraAnimation(facade.cam, facade.target)}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold bg-slate-900/60 transition-all cursor-pointer ${facade.color}`}
+              >
+                {facade.name}
+              </button>
+            ))}
+          </div>
 
           <canvas ref={canvasRef} className="w-full h-full block" />
 

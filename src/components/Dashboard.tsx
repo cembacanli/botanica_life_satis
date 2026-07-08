@@ -362,6 +362,19 @@ export default function Dashboard() {
               <div className="text-[15px] font-bold">Planlar</div>
               <div className="mt-1 text-xs text-sky-100">Vaziyet ve proje dokumanlari</div>
             </button>
+
+            <button
+              onClick={() => router.push('/construction-progress')}
+              className="group rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-500/90 to-cyan-700/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-cyan-200/40"
+            >
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">Şantiye Takibi</div>
+              <div className="mt-1 text-xs text-cyan-100">İnşaat ilerleme görselleri</div>
+            </button>
           </div>
         </div>
 

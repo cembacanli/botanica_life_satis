@@ -34,30 +34,24 @@ interface SaleDetails {
 }
 
 // Grid mapping coordinates for C & D blocks ring layout (5x3 grid)
-// Returns { col, row } where col is 0..4 (West-East) and row is 0..2 (North-South)
 function getCDGridCoords(number: number, floor: number) {
-  // Floor 1: numbers 1 to 11
-  // Floor 2: numbers 12 to 23
-  // Floor 3: numbers 24 to 35, etc.
   const startNum = floor === 1 ? 1 : 12 + (floor - 2) * 12
-  const k = number - startNum // 0-indexed relative position on the floor
+  const k = number - startNum
 
   if (floor === 1) {
-    // Floor 1 has 11 units. k goes 0..10. Slot (col=0, row=2) is empty for Building Entrance.
-    if (k === 0) return { col: 1, row: 0 } // number 1
-    if (k === 1) return { col: 2, row: 0 } // number 2
-    if (k === 2) return { col: 3, row: 0 } // number 3
-    if (k === 3) return { col: 4, row: 0 } // number 4
-    if (k === 4) return { col: 4, row: 1 } // number 5
-    if (k === 5) return { col: 4, row: 2 } // number 6
-    if (k === 6) return { col: 3, row: 2 } // number 7
-    if (k === 7) return { col: 2, row: 2 } // number 8
-    if (k === 8) return { col: 1, row: 2 } // number 9
-    if (k === 9) return { col: 0, row: 1 } // number 10
-    if (k === 10) return { col: 0, row: 0 } // number 11
-    return { col: 0, row: 2 } // fallback (entrance space)
+    if (k === 0) return { col: 1, row: 0 }
+    if (k === 1) return { col: 2, row: 0 }
+    if (k === 2) return { col: 3, row: 0 }
+    if (k === 3) return { col: 4, row: 0 }
+    if (k === 4) return { col: 4, row: 1 }
+    if (k === 5) return { col: 4, row: 2 }
+    if (k === 6) return { col: 3, row: 2 }
+    if (k === 7) return { col: 2, row: 2 }
+    if (k === 8) return { col: 1, row: 2 }
+    if (k === 9) return { col: 0, row: 1 }
+    if (k === 10) return { col: 0, row: 0 }
+    return { col: 0, row: 2 }
   } else {
-    // Floors 2-10 have 12 units. k goes 0..11.
     if (k === 0) return { col: 1, row: 0 }
     if (k === 1) return { col: 2, row: 0 }
     if (k === 2) return { col: 3, row: 0 }
@@ -96,9 +90,8 @@ function getCDFacadeDescription(number: number, floor: number) {
 }
 
 // Grid mapping coordinates for A & B blocks (2+1 layouts, 6 units per floor)
-// Returns { col, row } where col is 0..2 (West-East) and row is 0 or 2 (North-South)
 function getABGridCoords(number: number) {
-  const k = (number - 1) % 6 // 0-indexed relative position on the floor
+  const k = (number - 1) % 6
   if (k === 0) return { col: 0, row: 0 }
   if (k === 1) return { col: 1, row: 0 }
   if (k === 2) return { col: 2, row: 0 }
@@ -125,18 +118,17 @@ function createTextSprite(text: string, color: string, scale = 14) {
   canvas.height = 128
   const ctx = canvas.getContext('2d')
   if (ctx) {
-    ctx.font = 'Bold 42px Arial'
+    ctx.font = 'Bold 36px Arial'
     ctx.fillStyle = color
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    // Clear canvas
     ctx.clearRect(0, 0, 512, 128)
     // Draw background label rounded card
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.fillStyle = 'rgba(11, 15, 25, 0.9)'
     ctx.beginPath()
-    ctx.roundRect(10, 10, 492, 108, 20)
+    ctx.roundRect(10, 10, 492, 108, 16)
     ctx.fill()
-    ctx.lineWidth = 3
+    ctx.lineWidth = 2.5
     ctx.strokeStyle = color
     ctx.stroke()
     // Text
@@ -148,6 +140,29 @@ function createTextSprite(text: string, color: string, scale = 14) {
   const sprite = new THREE.Sprite(material)
   sprite.scale.set(scale, scale / 4, 1)
   return sprite
+}
+
+function create3DTree() {
+  const tree = new THREE.Group()
+  // Trunk
+  const trunkGeo = new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8)
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.9 })
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat)
+  trunk.position.y = 0.9
+  trunk.castShadow = true
+  trunk.receiveShadow = true
+  tree.add(trunk)
+
+  // Foliage
+  const foliageGeo = new THREE.DodecahedronGeometry(0.85, 1)
+  const foliageMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.85 })
+  const foliage = new THREE.Mesh(foliageGeo, foliageMat)
+  foliage.position.y = 2.1
+  foliage.castShadow = true
+  foliage.receiveShadow = true
+  tree.add(foliage)
+
+  return tree
 }
 
 export default function ThreeDViewPage() {
@@ -269,12 +284,12 @@ export default function ThreeDViewPage() {
 
     // Scene
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x0b0f19)
+    scene.background = new THREE.Color(0x0a0c14)
     sceneRef.current = scene
 
     // Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000)
-    camera.position.set(0, 38, 90)
+    camera.position.set(0, 36, 88)
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({
@@ -285,28 +300,30 @@ export default function ThreeDViewPage() {
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
     // Controls
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
-    controls.maxPolarAngle = Math.PI / 2 - 0.02 // Don't go below ground
+    controls.maxPolarAngle = Math.PI / 2 - 0.02
     controls.minDistance = 10
-    controls.maxDistance = 200
+    controls.maxDistance = 190
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65)
+    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.45) // Cool sky fill light
     scene.add(ambientLight)
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    dirLight.position.set(30, 80, 50)
+    const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.95) // Warm golden sun light
+    dirLight.position.set(40, 80, 50)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = 2048
     dirLight.shadow.mapSize.height = 2048
+    dirLight.shadow.bias = -0.0005
     scene.add(dirLight)
 
-    const dirLight2 = new THREE.DirectionalLight(0x3b82f6, 0.35)
-    dirLight2.position.set(-30, 30, -50)
+    const dirLight2 = new THREE.DirectionalLight(0x8b5cf6, 0.25) // Purple ambient neon fill
+    dirLight2.position.set(-40, 30, -50)
     scene.add(dirLight2)
 
     // Ground Grid Helper
@@ -315,21 +332,97 @@ export default function ThreeDViewPage() {
     scene.add(gridHelper)
 
     // Stage Compass & Facade Sprites on ground
-    const compassNorth = createTextSprite('KUZEY (YOL TARAFI)', '#ef4444', 22)
-    compassNorth.position.set(0, -1.0, -54)
+    const compassNorth = createTextSprite('KUZEY (YOL TARAFI)', '#ef4444', 20)
+    compassNorth.position.set(0, -0.9, -52)
     scene.add(compassNorth)
 
-    const compassSouth = createTextSprite('GÜNEY (BİNA GİRİŞLERİ)', '#10b981', 24)
-    compassSouth.position.set(0, -1.0, 54)
+    const compassSouth = createTextSprite('GÜNEY (BİNA GİRİŞLERİ)', '#10b981', 22)
+    compassSouth.position.set(0, -0.9, 52)
     scene.add(compassSouth)
 
-    const compassWest = createTextSprite('BATI (PETROL OFİSİ)', '#94a3b8', 22)
-    compassWest.position.set(-54, -1.0, 0)
+    const compassWest = createTextSprite('BATI (PETROL OFİSİ)', '#94a3b8', 20)
+    compassWest.position.set(-52, -0.9, 0)
     scene.add(compassWest)
 
-    const compassEast = createTextSprite('DOĞU (BOTANICA TARAFI)', '#94a3b8', 22)
-    compassEast.position.set(54, -1.0, 0)
+    const compassEast = createTextSprite('DOĞU (BOTANICA TARAFI)', '#94a3b8', 20)
+    compassEast.position.set(52, -0.9, 0)
     scene.add(compassEast)
+
+    // --- LANDSCAPING (Yeşil Alanlar / Çim) ---
+    // 1. Central Courtyard Grass Lawn Plane
+    const yardGeo = new THREE.BoxGeometry(34, 0.1, 26)
+    const yardMat = new THREE.MeshStandardMaterial({
+      color: 0x1b4d3e, // Forest Green
+      roughness: 0.9,
+      metalness: 0.05
+    })
+    const yardLawn = new THREE.Mesh(yardGeo, yardMat)
+    yardLawn.position.set(0, -1.45, 0)
+    yardLawn.receiveShadow = true
+    scene.add(yardLawn)
+
+    // 2. West (Petrol Ofisi) Grass stripe
+    const westLawnGeo = new THREE.BoxGeometry(8, 0.1, 74)
+    const westLawn = new THREE.Mesh(westLawnGeo, yardMat)
+    westLawn.position.set(-41, -1.45, 0)
+    westLawn.receiveShadow = true
+    scene.add(westLawn)
+
+    // 3. East (Botanica) Grass stripe
+    const eastLawnGeo = new THREE.BoxGeometry(8, 0.1, 74)
+    const eastLawn = new THREE.Mesh(eastLawnGeo, yardMat)
+    eastLawn.position.set(41, -1.45, 0)
+    eastLawn.receiveShadow = true
+    scene.add(eastLawn)
+
+    // 4. North Grass stripe
+    const northLawnGeo = new THREE.BoxGeometry(90, 0.1, 6)
+    const northLawn = new THREE.Mesh(northLawnGeo, yardMat)
+    northLawn.position.set(0, -1.45, -35)
+    northLawn.receiveShadow = true
+    scene.add(northLawn)
+
+    // 5. South Grass stripe
+    const southLawnGeo = new THREE.BoxGeometry(90, 0.1, 6)
+    const southLawn = new THREE.Mesh(southLawnGeo, yardMat)
+    southLawn.position.set(0, -1.45, 35)
+    southLawn.receiveShadow = true
+    scene.add(southLawn)
+
+    // --- PARCEL BOUNDARY (Parsel Sınırı) ---
+    // Drawing a glowing neon-purple border path around the project parcel
+    const boundaryPoints = [
+      new THREE.Vector3(-45, -1.35, -38),
+      new THREE.Vector3(45, -1.35, -38),
+      new THREE.Vector3(45, -1.35, 38),
+      new THREE.Vector3(-45, -1.35, 38),
+      new THREE.Vector3(-45, -1.35, -38)
+    ]
+    const borderGeo = new THREE.BufferGeometry().setFromPoints(boundaryPoints)
+    const borderMat = new THREE.LineBasicMaterial({ color: 0x8b5cf6, linewidth: 3 })
+    const boundaryLine = new THREE.Line(borderGeo, borderMat)
+    scene.add(boundaryLine)
+
+    const borderLabel = createTextSprite('ARSA PARSEL SINIRI', '#8b5cf6', 15)
+    borderLabel.position.set(-45, 0.2, -38)
+    scene.add(borderLabel)
+
+    // --- 3D TREES (Peyzaj Ağaçları) ---
+    // Add trees inside the courtyard and along the grass borders
+    const treePositions = [
+      // Courtyard trees
+      { x: -5, z: -5 }, { x: 5, z: -5 }, { x: -5, z: 5 }, { x: 5, z: 5 },
+      // West border trees
+      { x: -41, z: -25 }, { x: -41, z: 0 }, { x: -41, z: 25 },
+      // East border trees
+      { x: 41, z: -25 }, { x: 41, z: 0 }, { x: 41, z: 25 }
+    ]
+
+    treePositions.forEach((pos) => {
+      const tree = create3DTree()
+      tree.position.set(pos.x, -1.4, pos.z)
+      scene.add(tree)
+    })
 
     // Render Blocks
     const meshesMap = new Map<string, THREE.Mesh>()
@@ -353,26 +446,22 @@ export default function ThreeDViewPage() {
         if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
 
         const center = blockCenters[block]
-        // Entrance is on South-West corner: col=0, row=2 -> local position:
-        // Col 0: X_local = -2 * 3.0 = -6.0
-        // Row 2: Z_local = 1 * 3.0 = 3.0
         const entX = center.x - 6.0
         const entZ = center.z + 3.0
-        const entY = 1 * 2.4 - 1.2 // Y position at floor 1
+        const entY = 1 * 2.4 - 1.2
 
         // Render entrance lobby block in gray
         const entGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4)
         const entMat = new THREE.MeshStandardMaterial({
-          color: 0x475569,
+          color: 0x334155,
           roughness: 0.8,
-          metalness: 0.1,
+          metalness: 0.15,
           transparent: true,
-          opacity: 0.65
+          opacity: 0.85
         })
         const entMesh = new THREE.Mesh(entGeo, entMat)
         entMesh.position.set(entX, entY, entZ)
         scene.add(entMesh)
-        // Store as part of map to clean up on reload
         meshesMap.set(`entrance-${block}`, entMesh)
 
         // Floating label
@@ -387,7 +476,7 @@ export default function ThreeDViewPage() {
         if (selectedBlock !== 'Tümü' && apt.block !== selectedBlock) return
 
         const center = blockCenters[apt.block]
-        const Y = apt.floor * 2.4 // 2.4m height per floor
+        const Y = apt.floor * 2.4
 
         let X = center.x
         let Z = center.z
@@ -396,12 +485,8 @@ export default function ThreeDViewPage() {
         let boxDepth = 2.4
 
         if (apt.block === 'C' || apt.block === 'D') {
-          // 1+1 Apartments in C & D: ring layout based on col & row
           const { col, row } = getCDGridCoords(apt.number, apt.floor)
-
-          // 5 Columns: spacing = 3.0m along X axis
           const X_local = (col - 2) * 3.0
-          // 3 Rows: spacing = 3.0m along Z axis
           const Z_local = (row - 1) * 3.0
 
           X = center.x + X_local
@@ -409,7 +494,6 @@ export default function ThreeDViewPage() {
           boxWidth = 2.4
           boxDepth = 2.4
         } else {
-          // 2+1 Apartments in A & B: 3 columns, 2 rows (North and South sides)
           const { col, row } = getABGridCoords(apt.number)
           const X_local = (col - 1) * 4.2
           const Z_local = (row - 1) * 4.2
@@ -422,20 +506,25 @@ export default function ThreeDViewPage() {
 
         const geometry = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth)
 
-        // Color based on status & metadata
+        // High premium semi-translucent glass material with metal reflection
         const color = getApartmentColor(apt)
         const material = new THREE.MeshStandardMaterial({
           color: color,
-          roughness: 0.25,
-          metalness: 0.05,
+          roughness: 0.15,
+          metalness: 0.35,
           transparent: true,
-          opacity: 0.85
+          opacity: 0.90
         })
 
         const mesh = new THREE.Mesh(geometry, material)
         mesh.position.set(X, Y, Z)
         mesh.castShadow = true
         mesh.receiveShadow = true
+
+        // Add architectural edges geometry outline to define borders cleanly
+        const edges = new THREE.EdgesGeometry(geometry)
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }))
+        mesh.add(line)
 
         // Store apartment info on mesh userData
         mesh.userData = { apartment: apt }
@@ -478,7 +567,7 @@ export default function ThreeDViewPage() {
         // Highlight hovered mesh
         const mesh = intersect.object as THREE.Mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
-        mat.emissive.setHex(0x3b3b3b)
+        mat.emissive.setHex(0x3c3c3c)
 
         // Reset other meshes' emissive
         meshesMap.forEach((m) => {
@@ -510,7 +599,7 @@ export default function ThreeDViewPage() {
         const mesh = intersect.object as THREE.Mesh
         if (selectedMeshRef.current && selectedMeshRef.current !== mesh) {
           const oldMat = selectedMeshRef.current.material as THREE.MeshStandardMaterial
-          oldMat.opacity = 0.85
+          oldMat.opacity = 0.90
         }
         selectedMeshRef.current = mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
@@ -576,7 +665,7 @@ export default function ThreeDViewPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-black text-white">3D Dijital İkiz</h1>
             <span className="bg-cyan-500/20 text-cyan-400 text-xs px-2.5 py-1 rounded-full font-bold border border-cyan-500/30">
-              Gerçek Vaziyet & Cephe Modeli
+              Vaziyet, Peyzaj & Arsa Sınır Modeli
             </span>
           </div>
         </div>

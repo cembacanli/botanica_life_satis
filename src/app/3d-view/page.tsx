@@ -132,11 +132,22 @@ function createGroundLabelMesh(text: string, color: string, width = 36, height =
     ctx.strokeStyle = color
     ctx.stroke()
     
-    // Text drawing (crisp and large)
-    ctx.font = 'Bold 64px Arial'
+    // Text drawing (crisp, dynamic scaling to prevent border overflow)
+    let fontSize = 48
+    ctx.font = `Bold ${fontSize}px Arial`
     ctx.fillStyle = '#ffffff'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
+    
+    // Auto-shrink text font size if it exceeds the card margins
+    const maxTextWidth = 880
+    let textMetrics = ctx.measureText(text)
+    while (textMetrics.width > maxTextWidth && fontSize > 20) {
+      fontSize -= 2
+      ctx.font = `Bold ${fontSize}px Arial`
+      textMetrics = ctx.measureText(text)
+    }
+    
     ctx.fillText(text, 512, 128)
   }
   const texture = new THREE.CanvasTexture(canvas)

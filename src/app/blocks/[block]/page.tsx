@@ -501,10 +501,19 @@ export default function BlockPage() {
       return apt && apt.block === blockLetter && record.saleType === 'sold'
     })
 
-    const totalRevenue = blockSales.reduce((sum, record) => {
-      const saleData = saleDetailsMap[record.apartmentId] || {}
-      return sum + (saleData.salePrice || 0)
-    }, 0)
+    const totalRevenue = blockSales
+      .filter((rec: any) => {
+        const name = (rec.customerName || '')
+          .toLocaleLowerCase('tr-TR')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+        const saleData = saleDetailsMap[rec.apartmentId] || {}
+        return !(name.includes('barter') || saleData.paymentMethod === 'barter')
+      })
+      .reduce((sum, record) => {
+        const saleData = saleDetailsMap[record.apartmentId] || {}
+        return sum + (saleData.salePrice || 0)
+      }, 0)
 
     const totalDeposit = blockSales.reduce((sum, record) => {
       const saleData = saleDetailsMap[record.apartmentId] || {}
@@ -528,10 +537,19 @@ export default function BlockPage() {
   const calculateProjectStats = () => {
     const allSales = salesRecords.filter(record => record.saleType === 'sold')
 
-    const totalRevenue = allSales.reduce((sum, record) => {
-      const saleData = saleDetailsMap[record.apartmentId] || {}
-      return sum + (saleData.salePrice || 0)
-    }, 0)
+    const totalRevenue = allSales
+      .filter((rec: any) => {
+        const name = (rec.customerName || '')
+          .toLocaleLowerCase('tr-TR')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+        const saleData = saleDetailsMap[rec.apartmentId] || {}
+        return !(name.includes('barter') || saleData.paymentMethod === 'barter')
+      })
+      .reduce((sum, record) => {
+        const saleData = saleDetailsMap[record.apartmentId] || {}
+        return sum + (saleData.salePrice || 0)
+      }, 0)
 
     const totalDeposit = allSales.reduce((sum, record) => {
       const saleData = saleDetailsMap[record.apartmentId] || {}

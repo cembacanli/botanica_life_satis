@@ -662,7 +662,7 @@ export default function ThreeDViewPage() {
 
     // Petrol Ofisi canopy (çatı - geniş saçak)
     const canopyGeo = new THREE.BoxGeometry(30, 0.5, 14)
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.7 })
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.2, metalness: 0.7 })
     const canopy = new THREE.Mesh(canopyGeo, canopyMat)
     canopy.position.set(-65, 5, 0)
     canopy.castShadow = true

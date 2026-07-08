@@ -375,6 +375,19 @@ export default function Dashboard() {
               <div className="text-[15px] font-bold">Şantiye Takibi</div>
               <div className="mt-1 text-xs text-cyan-100">İnşaat ilerleme görselleri</div>
             </button>
+
+            <button
+              onClick={() => router.push('/3d-view')}
+              className="group rounded-2xl border border-purple-300/20 bg-gradient-to-br from-purple-500/90 to-indigo-700/90 p-3.5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:border-purple-200/40"
+            >
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m0 0l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M6 6l2 1M12 7V4M4 7v10l8 4m0-4v4m8-4v-5l-8-4m0 0v5m8-1l-2-1" />
+                </svg>
+              </div>
+              <div className="text-[15px] font-bold">3D Görünüm</div>
+              <div className="mt-1 text-xs text-purple-100">İnteraktif 3D Dijital İkiz</div>
+            </button>
           </div>
         </div>
 

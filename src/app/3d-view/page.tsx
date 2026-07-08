@@ -33,6 +33,123 @@ interface SaleDetails {
   remainingBalance: number
 }
 
+// Grid mapping coordinates for C & D blocks ring layout (5x3 grid)
+// Returns { col, row } where col is 0..4 (West-East) and row is 0..2 (North-South)
+function getCDGridCoords(number: number, floor: number) {
+  // Floor 1: numbers 1 to 11
+  // Floor 2: numbers 12 to 23
+  // Floor 3: numbers 24 to 35, etc.
+  const startNum = floor === 1 ? 1 : 12 + (floor - 2) * 12
+  const k = number - startNum // 0-indexed relative position on the floor
+
+  if (floor === 1) {
+    // Floor 1 has 11 units. k goes 0..10. Slot (col=0, row=2) is empty for Building Entrance.
+    if (k === 0) return { col: 1, row: 0 } // number 1
+    if (k === 1) return { col: 2, row: 0 } // number 2
+    if (k === 2) return { col: 3, row: 0 } // number 3
+    if (k === 3) return { col: 4, row: 0 } // number 4
+    if (k === 4) return { col: 4, row: 1 } // number 5
+    if (k === 5) return { col: 4, row: 2 } // number 6
+    if (k === 6) return { col: 3, row: 2 } // number 7
+    if (k === 7) return { col: 2, row: 2 } // number 8
+    if (k === 8) return { col: 1, row: 2 } // number 9
+    if (k === 9) return { col: 0, row: 1 } // number 10
+    if (k === 10) return { col: 0, row: 0 } // number 11
+    return { col: 0, row: 2 } // fallback (entrance space)
+  } else {
+    // Floors 2-10 have 12 units. k goes 0..11.
+    if (k === 0) return { col: 1, row: 0 }
+    if (k === 1) return { col: 2, row: 0 }
+    if (k === 2) return { col: 3, row: 0 }
+    if (k === 3) return { col: 4, row: 0 }
+    if (k === 4) return { col: 4, row: 1 }
+    if (k === 5) return { col: 4, row: 2 }
+    if (k === 6) return { col: 3, row: 2 }
+    if (k === 7) return { col: 2, row: 2 }
+    if (k === 8) return { col: 1, row: 2 }
+    if (k === 9) return { col: 0, row: 2 }
+    if (k === 10) return { col: 0, row: 1 }
+    if (k === 11) return { col: 0, row: 0 }
+    return { col: 0, row: 0 }
+  }
+}
+
+// Facade string builder based on grid position for C & D blocks
+function getCDFacadeDescription(number: number, floor: number) {
+  const { col, row } = getCDGridCoords(number, floor)
+
+  if (row === 0) {
+    if (col === 0) return 'Kuzey-Batı Köşe (Yol & Petrol Ofisi)'
+    if (col === 4) return 'Kuzey-Doğu Köşe (Yol & Botanica)'
+    return 'Kuzey Cephe (Yol Tarafı)'
+  }
+  if (row === 2) {
+    if (col === 0) return 'Güney-Batı Köşe (Giriş & Petrol Ofisi)'
+    if (col === 4) return 'Güney-Doğu Köşe (Giriş & Botanica)'
+    return 'Güney Cephe (Giriş Tarafı)'
+  }
+  if (row === 1) {
+    if (col === 0) return 'Batı Cephe (Petrol Ofisi Tarafı)'
+    if (col === 4) return 'Doğu Cephe (Botanica Tarafı)'
+  }
+  return 'İç Avlu / Koridor'
+}
+
+// Grid mapping coordinates for A & B blocks (2+1 layouts, 6 units per floor)
+// Returns { col, row } where col is 0..2 (West-East) and row is 0 or 2 (North-South)
+function getABGridCoords(number: number) {
+  const k = (number - 1) % 6 // 0-indexed relative position on the floor
+  if (k === 0) return { col: 0, row: 0 }
+  if (k === 1) return { col: 1, row: 0 }
+  if (k === 2) return { col: 2, row: 0 }
+  if (k === 3) return { col: 2, row: 2 }
+  if (k === 4) return { col: 1, row: 2 }
+  if (k === 5) return { col: 0, row: 2 }
+  return { col: 0, row: 0 }
+}
+
+function getABFacadeDescription(number: number) {
+  const k = (number - 1) % 6
+  if (k === 0) return 'Kuzey-Batı Köşe (Yol Tarafı)'
+  if (k === 1) return 'Kuzey Cephe (Yol Tarafı)'
+  if (k === 2) return 'Kuzey-Doğu Köşe (Yol Tarafı)'
+  if (k === 3) return 'Güney-Doğu Köşe (Bahçe Tarafı)'
+  if (k === 4) return 'Güney Cephe (Bahçe Tarafı)'
+  if (k === 5) return 'Güney-Batı Köşe (Bahçe Tarafı)'
+  return 'Bahçe Cephesi'
+}
+
+function createTextSprite(text: string, color: string, scale = 14) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.font = 'Bold 42px Arial'
+    ctx.fillStyle = color
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    // Clear canvas
+    ctx.clearRect(0, 0, 512, 128)
+    // Draw background label rounded card
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+    ctx.beginPath()
+    ctx.roundRect(10, 10, 492, 108, 20)
+    ctx.fill()
+    ctx.lineWidth = 3
+    ctx.strokeStyle = color
+    ctx.stroke()
+    // Text
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, 256, 64)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true })
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(scale, scale / 4, 1)
+  return sprite
+}
+
 export default function ThreeDViewPage() {
   const router = useRouter()
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -135,6 +252,13 @@ export default function ThreeDViewPage() {
     return 'bg-green-500/20 text-green-400 border border-green-500/30'
   }
 
+  const getApartmentFacadeText = (apt: Apartment) => {
+    if (apt.block === 'C' || apt.block === 'D') {
+      return getCDFacadeDescription(apt.number, apt.floor)
+    }
+    return getABFacadeDescription(apt.number)
+  }
+
   // Set up Three.js Scene
   useEffect(() => {
     if (loading || apartments.length === 0 || !canvasRef.current || !containerRef.current) return
@@ -150,7 +274,7 @@ export default function ThreeDViewPage() {
 
     // Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000)
-    camera.position.set(0, 30, 80)
+    camera.position.set(0, 38, 90)
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({
@@ -168,27 +292,44 @@ export default function ThreeDViewPage() {
     controls.dampingFactor = 0.05
     controls.maxPolarAngle = Math.PI / 2 - 0.02 // Don't go below ground
     controls.minDistance = 10
-    controls.maxDistance = 180
+    controls.maxDistance = 200
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65)
     scene.add(ambientLight)
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    dirLight.position.set(20, 60, 40)
+    dirLight.position.set(30, 80, 50)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = 2048
     dirLight.shadow.mapSize.height = 2048
     scene.add(dirLight)
 
-    const dirLight2 = new THREE.DirectionalLight(0x3b82f6, 0.3)
-    dirLight2.position.set(-20, 30, -40)
+    const dirLight2 = new THREE.DirectionalLight(0x3b82f6, 0.35)
+    dirLight2.position.set(-30, 30, -50)
     scene.add(dirLight2)
 
-    // Ground Grid
-    const gridHelper = new THREE.GridHelper(200, 50, 0x1f2937, 0x111827)
+    // Ground Grid Helper
+    const gridHelper = new THREE.GridHelper(220, 55, 0x1f2937, 0x111827)
     gridHelper.position.y = -1.5
     scene.add(gridHelper)
+
+    // Stage Compass & Facade Sprites on ground
+    const compassNorth = createTextSprite('KUZEY (YOL TARAFI)', '#ef4444', 22)
+    compassNorth.position.set(0, -1.0, -54)
+    scene.add(compassNorth)
+
+    const compassSouth = createTextSprite('GÜNEY (BİNA GİRİŞLERİ)', '#10b981', 24)
+    compassSouth.position.set(0, -1.0, 54)
+    scene.add(compassSouth)
+
+    const compassWest = createTextSprite('BATI (PETROL OFİSİ)', '#94a3b8', 22)
+    compassWest.position.set(-54, -1.0, 0)
+    scene.add(compassWest)
+
+    const compassEast = createTextSprite('DOĞU (BOTANICA TARAFI)', '#94a3b8', 22)
+    compassEast.position.set(54, -1.0, 0)
+    scene.add(compassEast)
 
     // Render Blocks
     const meshesMap = new Map<string, THREE.Mesh>()
@@ -199,50 +340,96 @@ export default function ThreeDViewPage() {
       meshesMap.forEach((mesh) => scene.remove(mesh))
       meshesMap.clear()
 
-      // Define blocks layout offsets in 3D
-      // A-B are 30 units (2+1), C-D are 119 units (1+1)
-      const blockOffsets = {
-        A: -36,
-        B: -12,
-        C: 12,
-        D: 36
+      // Define block offset centers (A-B north, C-D south)
+      const blockCenters = {
+        B: { x: -24, z: -20 },
+        A: { x: 24, z: -20 },
+        D: { x: -24, z: 20 },
+        C: { x: 24, z: 20 }
+      }
+
+      // Add visual "Bina Girişi" labels & portals for C and D blocks on Floor 1
+      for (const block of ['C', 'D'] as const) {
+        if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
+
+        const center = blockCenters[block]
+        // Entrance is on South-West corner: col=0, row=2 -> local position:
+        // Col 0: X_local = -2 * 3.0 = -6.0
+        // Row 2: Z_local = 1 * 3.0 = 3.0
+        const entX = center.x - 6.0
+        const entZ = center.z + 3.0
+        const entY = 1 * 2.4 - 1.2 // Y position at floor 1
+
+        // Render entrance lobby block in gray
+        const entGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4)
+        const entMat = new THREE.MeshStandardMaterial({
+          color: 0x475569,
+          roughness: 0.8,
+          metalness: 0.1,
+          transparent: true,
+          opacity: 0.65
+        })
+        const entMesh = new THREE.Mesh(entGeo, entMat)
+        entMesh.position.set(entX, entY, entZ)
+        scene.add(entMesh)
+        // Store as part of map to clean up on reload
+        meshesMap.set(`entrance-${block}`, entMesh)
+
+        // Floating label
+        const entSprite = createTextSprite('BİNA GİRİŞİ', '#10b981', 8)
+        entSprite.position.set(entX, entY + 1.8, entZ)
+        scene.add(entSprite)
+        meshesMap.set(`entrance-label-${block}`, entSprite as any)
       }
 
       apartments.forEach((apt) => {
         // Skip if not matches filter
         if (selectedBlock !== 'Tümü' && apt.block !== selectedBlock) return
 
-        // Compute local grid coordinates based on Block name and Facade
-        const X_center = blockOffsets[apt.block]
+        const center = blockCenters[apt.block]
         const Y = apt.floor * 2.4 // 2.4m height per floor
 
-        // On each floor, sort apartments by number to place them horizontally
-        const blockApts = apartments.filter((a) => a.block === apt.block && a.floor === apt.floor && a.facade === apt.facade)
-        blockApts.sort((a, b) => a.number - b.number)
-        const index = blockApts.findIndex((a) => a.id === apt.id)
-        const count = blockApts.length
+        let X = center.x
+        let Z = center.z
+        let boxWidth = 2.4
+        let boxHeight = 2.0
+        let boxDepth = 2.4
 
-        // Space apartments along Z or X axis depending on block
-        // We will layout facades: Z = +2.5 for front (ana_yol), Z = -2.5 for back (arka_cephe)
-        const Z = apt.facade === 'ana_yol' ? 3 : -3
-        const X_offset = count > 1 ? (index - (count - 1) / 2) * 3.4 : 0
-        const X = X_center + X_offset
+        if (apt.block === 'C' || apt.block === 'D') {
+          // 1+1 Apartments in C & D: ring layout based on col & row
+          const { col, row } = getCDGridCoords(apt.number, apt.floor)
 
-        // Mesh Dimensions (1+1 compact rooms or 2+1 wider rooms)
-        const boxWidth = apt.block === 'A' || apt.block === 'B' ? 3.0 : 2.5
-        const boxHeight = 1.9
-        const boxDepth = 2.8
+          // 5 Columns: spacing = 3.0m along X axis
+          const X_local = (col - 2) * 3.0
+          // 3 Rows: spacing = 3.0m along Z axis
+          const Z_local = (row - 1) * 3.0
+
+          X = center.x + X_local
+          Z = center.z + Z_local
+          boxWidth = 2.4
+          boxDepth = 2.4
+        } else {
+          // 2+1 Apartments in A & B: 3 columns, 2 rows (North and South sides)
+          const { col, row } = getABGridCoords(apt.number)
+          const X_local = (col - 1) * 4.2
+          const Z_local = (row - 1) * 4.2
+
+          X = center.x + X_local
+          Z = center.z + Z_local
+          boxWidth = 3.8
+          boxDepth = 3.2
+        }
 
         const geometry = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth)
 
-        // Color based on status
+        // Color based on status & metadata
         const color = getApartmentColor(apt)
         const material = new THREE.MeshStandardMaterial({
           color: color,
-          roughness: 0.2,
-          metalness: 0.1,
+          roughness: 0.25,
+          metalness: 0.05,
           transparent: true,
-          opacity: 0.9
+          opacity: 0.85
         })
 
         const mesh = new THREE.Mesh(geometry, material)
@@ -257,9 +444,10 @@ export default function ThreeDViewPage() {
         meshesMap.set(apt.id, mesh)
       })
 
-      // Adjust controls target
+      // Adjust camera focus target
       if (selectedBlock !== 'Tümü') {
-        controls.target.set(blockOffsets[selectedBlock], 10, 0)
+        const center = blockCenters[selectedBlock]
+        controls.target.set(center.x, 12, center.z)
       } else {
         controls.target.set(0, 10, 0)
       }
@@ -272,7 +460,6 @@ export default function ThreeDViewPage() {
     const mouse = new THREE.Vector2()
 
     const onPointerMove = (event: MouseEvent) => {
-      // Calculate mouse position in normalized device coordinates
       const rect = renderer.domElement.getBoundingClientRect()
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -291,7 +478,7 @@ export default function ThreeDViewPage() {
         // Highlight hovered mesh
         const mesh = intersect.object as THREE.Mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
-        mat.emissive.setHex(0x333333)
+        mat.emissive.setHex(0x3b3b3b)
 
         // Reset other meshes' emissive
         meshesMap.forEach((m) => {
@@ -320,12 +507,10 @@ export default function ThreeDViewPage() {
         const apt = intersect.object.userData.apartment as Apartment
         setSelectedApartment(apt)
 
-        // Highlight selected mesh border / color
         const mesh = intersect.object as THREE.Mesh
         if (selectedMeshRef.current && selectedMeshRef.current !== mesh) {
-          // Restore opacity of old selected mesh
           const oldMat = selectedMeshRef.current.material as THREE.MeshStandardMaterial
-          oldMat.opacity = 0.9
+          oldMat.opacity = 0.85
         }
         selectedMeshRef.current = mesh
         const mat = mesh.material as THREE.MeshStandardMaterial
@@ -336,7 +521,6 @@ export default function ThreeDViewPage() {
     container.addEventListener('mousemove', onPointerMove)
     container.addEventListener('click', onPointerDown)
 
-    // Resize Handler
     const handleResize = () => {
       if (!containerRef.current) return
       const w = containerRef.current.clientWidth
@@ -348,7 +532,6 @@ export default function ThreeDViewPage() {
 
     window.addEventListener('resize', handleResize)
 
-    // Animation Loop
     let animationFrameId = 0
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate)
@@ -393,7 +576,7 @@ export default function ThreeDViewPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-black text-white">3D Dijital İkiz</h1>
             <span className="bg-cyan-500/20 text-cyan-400 text-xs px-2.5 py-1 rounded-full font-bold border border-cyan-500/30">
-              Three.js / WebGL
+              Gerçek Vaziyet & Cephe Modeli
             </span>
           </div>
         </div>
@@ -435,15 +618,16 @@ export default function ThreeDViewPage() {
           {/* Interactive Hover Tooltip */}
           {hoveredApartment && (
             <div
-              className="fixed bg-slate-950/95 border border-slate-800 rounded-xl p-3 shadow-2xl z-30 pointer-events-none text-xs space-y-1 backdrop-blur-md min-w-[150px]"
+              className="fixed bg-slate-950/95 border border-slate-800 rounded-xl p-3 shadow-2xl z-30 pointer-events-none text-xs space-y-1 backdrop-blur-md min-w-[180px]"
               style={{ left: tooltipPos.x, top: tooltipPos.y }}
             >
-              <div className="flex items-center justify-between font-bold text-white border-b border-slate-800 pb-1 mb-1">
+              <div className="flex items-center justify-between font-bold text-white border-b border-slate-800/80 pb-1 mb-1">
                 <span>Daire {hoveredApartment.number}</span>
                 <span className="text-cyan-400">{hoveredApartment.block} Blok</span>
               </div>
               <div>Kat: <span className="font-semibold text-slate-200">{hoveredApartment.floor}. Kat</span></div>
-              <div>Tip: <span className="font-semibold text-slate-200">{hoveredApartment.type}</span></div>
+              <div>Cephe: <span className="font-semibold text-cyan-300">{getApartmentFacadeText(hoveredApartment)}</span></div>
+              <div>Tip: <span className="font-semibold text-slate-200">{hoveredApartment.type} ({hoveredApartment.area} m²)</span></div>
               <div>Fiyat: <span className="font-semibold text-green-400">
                 {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(hoveredApartment.price)}
               </span></div>
@@ -527,13 +711,13 @@ export default function ThreeDViewPage() {
                     <span className="text-xs text-slate-400">Brüt Alan</span>
                     <div className="font-bold text-white mt-0.5">{selectedApartment.area} m²</div>
                   </div>
-                  <div>
-                    <span className="text-xs text-slate-400">Cephe Yönü</span>
-                    <div className="font-bold text-white mt-0.5">
-                      {selectedApartment.facade === 'ana_yol' ? 'Ana Yol Cephe' : 'Arka Cephe'}
+                  <div className="col-span-2">
+                    <span className="text-xs text-slate-400">Cephe & Yön</span>
+                    <div className="font-bold text-cyan-400 mt-0.5">
+                      {getApartmentFacadeText(selectedApartment)}
                     </div>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <span className="text-xs text-slate-400">Liste Fiyatı</span>
                     <div className="font-bold text-green-400 mt-0.5">
                       {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(selectedApartment.price)}

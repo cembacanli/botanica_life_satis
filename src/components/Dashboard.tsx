@@ -410,20 +410,20 @@ export default function Dashboard() {
                 <polygon
                   points="1220,1605 1805,1545 1878,2218 1285,2275"
                   fill="transparent"
-                  className="hover:fill-emerald-400 hover:opacity-20 cursor-pointer transition-all"
-                  onClick={() => handleBlockClick('D')}
+                  className="hover:fill-green-400 hover:opacity-20 cursor-pointer transition-all"
+                  onClick={() => handleBlockClick('C')}
                 >
-                  <title>D Blok</title>
+                  <title>C Blok</title>
                 </polygon>
                 
                 {/* D Blok - Sağ Alt */}
                 <polygon
                   points="2925,1560 3555,1515 3628,2188 2995,2240"
                   fill="transparent"
-                  className="hover:fill-green-400 hover:opacity-20 cursor-pointer transition-all"
-                  onClick={() => handleBlockClick('C')}
+                  className="hover:fill-emerald-400 hover:opacity-20 cursor-pointer transition-all"
+                  onClick={() => handleBlockClick('D')}
                 >
-                  <title>C Blok</title>
+                  <title>D Blok</title>
                 </polygon>
               </svg>
             </div>

@@ -71,22 +71,23 @@ function getCDGridCoords(number: number, floor: number) {
 }
 
 // Facade string builder based on grid position for C & D blocks
-function getCDFacadeDescription(number: number, floor: number) {
+// C is on West/Left (Petrol Ofisi side), D is on East/Right (Botanica side)
+function getCDFacadeDescription(number: number, floor: number, block: 'C' | 'D') {
   const { col, row } = getCDGridCoords(number, floor)
 
   if (row === 0) {
-    if (col === 0) return 'Kuzey-Batı Köşe (Yol & Petrol Ofisi)'
-    if (col === 4) return 'Kuzey-Doğu Köşe (Yol & Botanica)'
+    if (col === 0) return block === 'C' ? 'Kuzey-Batı Köşe (Yol & Petrol Ofisi)' : 'Kuzey-Batı Köşe (Yol & İç Avlu)'
+    if (col === 4) return block === 'C' ? 'Kuzey-Doğu Köşe (Yol & İç Avlu)' : 'Kuzey-Doğu Köşe (Yol & Botanica)'
     return 'Kuzey Cephe (Yol Tarafı)'
   }
   if (row === 2) {
-    if (col === 0) return 'Güney-Batı Köşe (Giriş & Petrol Ofisi)'
-    if (col === 4) return 'Güney-Doğu Köşe (Giriş & Botanica)'
+    if (col === 0) return block === 'C' ? 'Güney-Batı Köşe (Giriş & Petrol Ofisi)' : 'Güney-Batı Köşe (Giriş & İç Avlu)'
+    if (col === 4) return block === 'C' ? 'Güney-Doğu Köşe (Giriş & İç Avlu)' : 'Güney-Doğu Köşe (Giriş & Botanica)'
     return 'Güney Cephe (Giriş Tarafı)'
   }
   if (row === 1) {
-    if (col === 0) return 'Batı Cephe (Petrol Ofisi Tarafı)'
-    if (col === 4) return 'Doğu Cephe (Botanica Tarafı)'
+    if (col === 0) return block === 'C' ? 'Batı Cephe (Petrol Ofisi Tarafı)' : 'Batı Cephe (İç Avlu Tarafı)'
+    if (col === 4) return block === 'C' ? 'Doğu Cephe (İç Avlu Tarafı)' : 'Doğu Cephe (Botanica Tarafı)'
   }
   return 'İç Avlu / Koridor'
 }
@@ -271,7 +272,7 @@ export default function ThreeDViewPage() {
 
   const getApartmentFacadeText = (apt: Apartment) => {
     if (apt.block === 'C' || apt.block === 'D') {
-      return getCDFacadeDescription(apt.number, apt.floor)
+      return getCDFacadeDescription(apt.number, apt.floor, apt.block)
     }
     return getABFacadeDescription(apt.number)
   }
@@ -313,10 +314,10 @@ export default function ThreeDViewPage() {
     controls.maxDistance = 190
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.45) // Cool sky fill light
+    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.45)
     scene.add(ambientLight)
 
-    const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.95) // Warm golden sun light
+    const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.95)
     dirLight.position.set(40, 80, 50)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = 2048
@@ -324,7 +325,7 @@ export default function ThreeDViewPage() {
     dirLight.shadow.bias = -0.0005
     scene.add(dirLight)
 
-    const dirLight2 = new THREE.DirectionalLight(0x8b5cf6, 0.25) // Purple ambient neon fill
+    const dirLight2 = new THREE.DirectionalLight(0x8b5cf6, 0.25)
     dirLight2.position.set(-40, 30, -50)
     scene.add(dirLight2)
 
@@ -351,7 +352,6 @@ export default function ThreeDViewPage() {
     scene.add(compassEast)
 
     // --- LANDSCAPING (Yeşil Alanlar / Çim) ---
-    // 1. Central Courtyard Grass Lawn Plane
     const yardGeo = new THREE.BoxGeometry(34, 0.1, 26)
     const yardMat = new THREE.MeshStandardMaterial({
       color: 0x1b4d3e,
@@ -363,28 +363,24 @@ export default function ThreeDViewPage() {
     yardLawn.receiveShadow = true
     scene.add(yardLawn)
 
-    // 2. West (Petrol Ofisi) Grass stripe
     const westLawnGeo = new THREE.BoxGeometry(8, 0.1, 74)
     const westLawn = new THREE.Mesh(westLawnGeo, yardMat)
     westLawn.position.set(-41, -1.45, 0)
     westLawn.receiveShadow = true
     scene.add(westLawn)
 
-    // 3. East (Botanica) Grass stripe
     const eastLawnGeo = new THREE.BoxGeometry(8, 0.1, 74)
     const eastLawn = new THREE.Mesh(eastLawnGeo, yardMat)
     eastLawn.position.set(41, -1.45, 0)
     eastLawn.receiveShadow = true
     scene.add(eastLawn)
 
-    // 4. North Grass stripe
     const northLawnGeo = new THREE.BoxGeometry(90, 0.1, 6)
     const northLawn = new THREE.Mesh(northLawnGeo, yardMat)
     northLawn.position.set(0, -1.45, -35)
     northLawn.receiveShadow = true
     scene.add(northLawn)
 
-    // 5. South Grass stripe
     const southLawnGeo = new THREE.BoxGeometry(90, 0.1, 6)
     const southLawn = new THREE.Mesh(southLawnGeo, yardMat)
     southLawn.position.set(0, -1.45, 35)
@@ -431,19 +427,20 @@ export default function ThreeDViewPage() {
       meshesMap.clear()
 
       // Define block offset centers
+      // Swapped: C block on West/Left (Petrol Ofisi side), D block on East/Right (Botanica side)
       const blockCenters = {
         B: { x: -24, z: -20 },
         A: { x: 24, z: -20 },
-        D: { x: -24, z: 20 },
-        C: { x: 24, z: 20 }
+        C: { x: -24, z: 20 },
+        D: { x: 24, z: 20 }
       }
 
       // Add floating block name cards on top of each block in 3D
       const blockNames = {
         B: 'B BLOK (2+1)',
         A: 'A BLOK (2+1)',
-        D: 'D BLOK (1+1)',
-        C: 'C BLOK (1+1)'
+        C: 'C BLOK (1+1)',
+        D: 'D BLOK (1+1)'
       }
       for (const [block, name] of Object.entries(blockNames)) {
         if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
@@ -455,14 +452,10 @@ export default function ThreeDViewPage() {
       }
 
       // Add visual "Bina Girişi" labels & portals for C and D blocks on Floor 1
-      // Placed exactly at col=2, row=2 (bottom-middle gap in 1. KAT layout)
       for (const block of ['C', 'D'] as const) {
         if (selectedBlock !== 'Tümü' && selectedBlock !== block) continue
 
         const center = blockCenters[block]
-        // col=2, row=2 -> local position:
-        // Col 2: X_local = (2 - 2) * 3.0 = 0
-        // Row 2: Z_local = (2 - 1) * 3.0 = 3.0
         const entX = center.x
         const entZ = center.z + 3.0
         const entY = 1 * 2.4 - 1.2
@@ -528,7 +521,6 @@ export default function ThreeDViewPage() {
 
         const geometry = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth)
 
-        // High premium semi-translucent glass material with metal reflection
         const color = getApartmentColor(apt)
         const material = new THREE.MeshStandardMaterial({
           color: color,
@@ -543,12 +535,10 @@ export default function ThreeDViewPage() {
         mesh.castShadow = true
         mesh.receiveShadow = true
 
-        // Add architectural edges geometry outline to define borders cleanly
         const edges = new THREE.EdgesGeometry(geometry)
         const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }))
         mesh.add(line)
 
-        // Store apartment info on mesh userData
         mesh.userData = { apartment: apt }
 
         scene.add(mesh)

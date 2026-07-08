@@ -457,24 +457,24 @@ export default function ThreeDViewPage() {
 
     // --- HIGH-CONTRAST GROUND FACADE LABELS (Dışarıda, Zeminde yatan tabelalar) ---
     // North Road Label
-    const groundFacadeNorth = createGroundLabelMesh('KUZEY CEPHESİ (YOL TARAFI)', '#f43f5e', 42, 10.5)
-    groundFacadeNorth.position.set(0, -1.43, -46)
+    const groundFacadeNorth = createGroundLabelMesh('KUZEY CEPHESİ (YOL TARAFI)', '#f43f5e', 24, 6)
+    groundFacadeNorth.position.set(0, -1.43, -42)
     scene.add(groundFacadeNorth)
 
     // South Road Label
-    const groundFacadeSouth = createGroundLabelMesh('GÜNEY CEPHESİ (GİRİŞ KAPILARI)', '#10b981', 44, 11)
-    groundFacadeSouth.position.set(0, -1.43, 46)
+    const groundFacadeSouth = createGroundLabelMesh('GÜNEY CEPHESİ (GİRİŞ KAPILARI)', '#10b981', 24, 6)
+    groundFacadeSouth.position.set(0, -1.43, 42)
     scene.add(groundFacadeSouth)
 
     // West Side (Petrol Ofisi) Road Label
-    const groundFacadeWest = createGroundLabelMesh('BATI CEPHESİ (PETROL OFİSİ TARAFI)', '#38bdf8', 44, 11)
-    groundFacadeWest.position.set(-54, -1.43, 0)
+    const groundFacadeWest = createGroundLabelMesh('BATI CEPHESİ (PETROL OFİSİ TARAFI)', '#38bdf8', 24, 6)
+    groundFacadeWest.position.set(-49, -1.43, 0)
     groundFacadeWest.rotation.z = Math.PI / 2 // Rotate along West boundary Z-axis
     scene.add(groundFacadeWest)
 
     // East Side (Botanica) Road Label
-    const groundFacadeEast = createGroundLabelMesh('DOĞU CEPHESİ (BOTANICA TARAFI)', '#38bdf8', 44, 11)
-    groundFacadeEast.position.set(54, -1.43, 0)
+    const groundFacadeEast = createGroundLabelMesh('DOĞU CEPHESİ (BOTANICA TARAFI)', '#38bdf8', 24, 6)
+    groundFacadeEast.position.set(49, -1.43, 0)
     groundFacadeEast.rotation.z = -Math.PI / 2 // Rotate along East boundary Z-axis
     scene.add(groundFacadeEast)
 

@@ -652,7 +652,7 @@ export default function ThreeDViewPage() {
     scene.add(roadLabel)
 
     // --- PETROL OFİSİ (West facade) ---
-    const petrolMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.5 })
+    const petrolMat = new THREE.MeshStandardMaterial({ color: 0xf0ece3, roughness: 0.35, metalness: 0.1 })
     const petrolBodyGeo = new THREE.BoxGeometry(18, 6, 20)
     const petrolBody = new THREE.Mesh(petrolBodyGeo, petrolMat)
     petrolBody.position.set(-65, 1.5, 0)

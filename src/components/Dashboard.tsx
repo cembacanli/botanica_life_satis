@@ -181,7 +181,7 @@ export default function Dashboard() {
     }, 0)
   const projectTotalSalePrice = soldTotalAmount + potentialAmount
   const totalDepositAmount = salesRecords
-    .filter((rec: any) => rec.saleType === 'sold')
+    .filter((rec: any) => rec.saleType === 'sold' && !barterApartmentIds.has(rec.apartmentId))
     .reduce((sum: number, rec: any) => {
       const saleData = saleDetailsMap[rec.apartmentId] || {}
       const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
@@ -485,11 +485,13 @@ export default function Dashboard() {
                   return sum + (saleData.salePrice || 0)
                 }, 0)
 
-              const totalDeposit = blockSales.reduce((sum: number, rec: any) => {
-                const saleData = saleDetailsMap[rec.apartmentId] || {}
-                const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
-                return sum + (saleData.depositAmount || 0) + payments
-              }, 0)
+              const totalDeposit = blockSales
+                .filter((rec: any) => !barterApartmentIds.has(rec.apartmentId))
+                .reduce((sum: number, rec: any) => {
+                  const saleData = saleDetailsMap[rec.apartmentId] || {}
+                  const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+                  return sum + (saleData.depositAmount || 0) + payments
+                }, 0)
 
               const remainingApts = unsoldAptsInBlock.length
 
@@ -563,11 +565,13 @@ export default function Dashboard() {
                 <div className="text-sm text-gray-300">Toplam Peşinat</div>
                 <div className="text-2xl font-bold text-orange-300">
                   {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 0 }).format(
-                    salesRecords.filter((rec: any) => rec.saleType === 'sold').reduce((sum: number, rec: any) => {
-                      const saleData = saleDetailsMap[rec.apartmentId] || {}
-                      const payments = (saleData.payments || []).reduce((s:number,p:any)=>s+(p.amount||0),0)
-                      return sum + (saleData.depositAmount || 0) + payments
-                    }, 0)
+                    salesRecords
+                      .filter((rec: any) => rec.saleType === 'sold' && !barterApartmentIds.has(rec.apartmentId))
+                      .reduce((sum: number, rec: any) => {
+                        const saleData = saleDetailsMap[rec.apartmentId] || {}
+                        const payments = (saleData.payments || []).reduce((s:number,p:any)=>s+(p.amount||0),0)
+                        return sum + (saleData.depositAmount || 0) + payments
+                      }, 0)
                   )}
                 </div>
               </div>

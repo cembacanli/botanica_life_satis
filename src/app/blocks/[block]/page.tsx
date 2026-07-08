@@ -515,11 +515,20 @@ export default function BlockPage() {
         return sum + (saleData.salePrice || 0)
       }, 0)
 
-    const totalDeposit = blockSales.reduce((sum, record) => {
-      const saleData = saleDetailsMap[record.apartmentId] || {}
-      const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
-      return sum + (saleData.depositAmount || 0) + payments
-    }, 0)
+    const totalDeposit = blockSales
+      .filter((rec: any) => {
+        const name = (rec.customerName || '')
+          .toLocaleLowerCase('tr-TR')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+        const saleData = saleDetailsMap[rec.apartmentId] || {}
+        return !(name.includes('barter') || saleData.paymentMethod === 'barter')
+      })
+      .reduce((sum, record) => {
+        const saleData = saleDetailsMap[record.apartmentId] || {}
+        const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+        return sum + (saleData.depositAmount || 0) + payments
+      }, 0)
 
     const remainingBalance = blockSales.reduce((sum, record) => {
       const saleData = saleDetailsMap[record.apartmentId] || {}
@@ -551,11 +560,20 @@ export default function BlockPage() {
         return sum + (saleData.salePrice || 0)
       }, 0)
 
-    const totalDeposit = allSales.reduce((sum, record) => {
-      const saleData = saleDetailsMap[record.apartmentId] || {}
-      const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
-      return sum + (saleData.depositAmount || 0) + payments
-    }, 0)
+    const totalDeposit = allSales
+      .filter((rec: any) => {
+        const name = (rec.customerName || '')
+          .toLocaleLowerCase('tr-TR')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+        const saleData = saleDetailsMap[rec.apartmentId] || {}
+        return !(name.includes('barter') || saleData.paymentMethod === 'barter')
+      })
+      .reduce((sum, record) => {
+        const saleData = saleDetailsMap[record.apartmentId] || {}
+        const payments = (saleData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0)
+        return sum + (saleData.depositAmount || 0) + payments
+      }, 0)
 
     const remainingBalance = allSales.reduce((sum, record) => {
       const saleData = saleDetailsMap[record.apartmentId] || {}
